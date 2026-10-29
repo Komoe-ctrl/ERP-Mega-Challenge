@@ -230,3 +230,23 @@
         font-family: var(--font-display);
     }
 }
+
+/* Impression (devis, bons de commande, situations) : seule la zone .print-area est imprimée. */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .print-area,
+    .print-area * {
+        visibility: visible;
+    }
+    .print-area {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        max-width: none;
+        border: 0;
+        box-shadow: none;
+    }
+}

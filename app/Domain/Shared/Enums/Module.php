@@ -83,9 +83,9 @@ enum Module: string
     }
 
     /**
-     * Route d'entrée du module, tant qu'elle existe (null = module à venir).
+     * Nom de la route d entrée du module.
      */
-    public function entryRoute(): ?string
+    public function entryRoute(): string
     {
         return match ($this) {
             self::Administration => 'administration.users.index',

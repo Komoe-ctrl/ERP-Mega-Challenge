@@ -30,8 +30,7 @@ final class ModuleNavigation
         foreach (Module::cases() as $module) {
             $route = $module->entryRoute();
 
-            if ($route === null
-                || ! Route::has($route)
+            if (! Route::has($route)
                 || ! $module->isEnabled()
                 || ! $user->can($module->permission(PermissionAction::View))) {
                 continue;

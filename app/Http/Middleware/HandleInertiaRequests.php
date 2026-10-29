@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Shared\Enums\RoleName;
 use App\Domain\Shared\Support\ModuleNavigation;
 use Illuminate\Http\Request;
 use Inertia\Middleware;

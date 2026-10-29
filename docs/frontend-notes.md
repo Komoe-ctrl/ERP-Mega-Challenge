@@ -41,3 +41,21 @@ Libellés et tons des statuts : `lib/status.ts`. Montants, dates : `lib/format.t
 - Gantt en CSS, sans bibliothèque (ADR 0007) ; défilement horizontal sur mobile.
 - Séparation des tâches rejouée côté écran : l'auteur d'une demande ne voit pas les boutons de décision (comparaison du nom).
 - Les écrans non listés ci-dessus ne sont pas commencés : voir le rapport final.
+
+## Écrans réalisés (URL → page)
+
+| Version | Écrans |
+| --- | --- |
+| Transverse | `/dashboard` tableau de bord · `/notifications` centre de notifications |
+| V1 | `/projets`, `/projets/{id}` (frise), `/projets/creer` · `/chantiers`, `/chantiers/{id}` (7 onglets, Gantt), `/chantiers/{id}/avancement` et `/rapport` (mobile) · `/achats/demandes`, `/creer` (mobile), `/{id}`, `/achats/a-valider`, `/achats/referentiel` (+ formulaire et historique) · `/budget`, `/budget/{id}` · `/administration/{users,roles,matrice,organisation,parametres,journal}` |
+| V2 | `/fournisseurs`, `/{id}` · `/achats/consultations` (+ comparatif), `/commandes`, `/receptions`, `/factures` · `/stocks`, `/stocks/mouvements`, `/stocks/inventaire` |
+| V3 | `/clients`, `/{id}` · `/devis`, `/devis/{id}` (éditeur + aperçu imprimable) · `/marches`, `/{id}` · `/situations`, `/{id}` |
+| V4 | `/main-oeuvre` (pointage mobile) · `/rh`, `/rh/conges`, `/rh/avances` · `/engins`, `/{id}` · `/finance`, `/caisse`, `/banque`, `/rentabilite`, `/tresorerie` |
+
+## Limites connues
+
+- Aucune persistance : tout est maquette (notifications « maquette »).
+- Les écrans d'authentification et de paramètres du starter kit restent en anglais (hors périmètre de cette mission).
+- Les formulaires de création des agences, services, sites, clients, fournisseurs, employés et avances sont des boutons « maquette » sans formulaire.
+- Pas de gestion hors ligne (PWA) : à étudier pour le pointage et l'avancement.
+- Aucun test ajouté pour les nouveaux écrans (consigne du mode express) ; les tests existants (Pest 105, Vitest 22) passent.

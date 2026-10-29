@@ -32,7 +32,7 @@ class AdminUserSeeder extends Seeder
 
         if (! $user->exists) {
             $user->fill([
-                'name' => (string) config('erp.demo_admin.name'),
+                'name' => config()->string('erp.demo_admin.name'),
                 'password' => $password,
                 'agency_id' => Agency::query()->where('code', 'ABJ')->value('id'),
                 'service_id' => Service::query()->where('code', 'ADM')->value('id'),

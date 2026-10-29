@@ -41,7 +41,7 @@ final class UserController extends Controller
                 'is_active' => $u->is_active,
                 'agency' => $u->agency?->name,
                 'service' => $u->service?->name,
-                'roles' => $u->roles->map(fn ($r) => $r instanceof Role ? $r->label() : $r->name)->values(),
+                'roles' => $u->roles->map(fn ($r): string => $r instanceof Role ? $r->label() : '')->values(),
             ]);
 
         return Inertia::render('Administration/Users/Index', [

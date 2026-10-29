@@ -3,11 +3,14 @@ includes:
     - vendor/nesbot/carbon/extension.neon
 
 parameters:
+    # Niveau 9 sur le code applicatif. Les fichiers config/ et les migrations
+    # publiés par les paquets Spatie / Horizon / Excel ne sont pas analysés :
+    # ce code tiers lit la configuration en `mixed`.
     paths:
         - app/
         - bootstrap/app.php
-        - config/
-        - database/
         - routes/
+        - database/factories/
+        - database/seeders/
 
-    level: 7
+    level: 9

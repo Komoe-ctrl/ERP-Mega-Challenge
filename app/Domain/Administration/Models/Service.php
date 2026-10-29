@@ -6,8 +6,11 @@ namespace App\Domain\Administration\Models;
 
 use App\Domain\Administration\Policies\ServicePolicy;
 use App\Models\User;
+use Database\Factories\ServiceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -21,9 +24,11 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 #[Fillable(['code', 'name', 'is_active'])]
 #[UsePolicy(ServicePolicy::class)]
+#[UseFactory(ServiceFactory::class)]
 class Service extends Model
 {
-    use LogsActivity;
+    /** @use HasFactory<ServiceFactory> */
+    use HasFactory, LogsActivity;
 
     protected function casts(): array
     {

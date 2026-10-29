@@ -51,18 +51,15 @@ final class SaveUserRequest extends FormRequest
 
     public function toData(): UserData
     {
-        /** @var array<string, mixed> $v */
-        $v = $this->validated();
-
         return new UserData(
-            name: $v['name'],
-            email: $v['email'],
-            agencyId: isset($v['agency_id']) ? (int) $v['agency_id'] : null,
-            serviceId: isset($v['service_id']) ? (int) $v['service_id'] : null,
-            phone: $v['phone'] ?? null,
-            isActive: (bool) $v['is_active'],
-            roles: array_values($v['roles'] ?? []),
-            password: $v['password'] ?? null,
+            name: $this->string('name')->toString(),
+            email: $this->string('email')->toString(),
+            agencyId: $this->filled('agency_id') ? $this->integer('agency_id') : null,
+            serviceId: $this->filled('service_id') ? $this->integer('service_id') : null,
+            phone: $this->filled('phone') ? $this->string('phone')->toString() : null,
+            isActive: $this->boolean('is_active'),
+            roles: array_values(array_filter((array) $this->input('roles', []), 'is_string')),
+            password: $this->filled('password') ? $this->string('password')->toString() : null,
         );
     }
 }

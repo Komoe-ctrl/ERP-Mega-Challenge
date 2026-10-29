@@ -39,6 +39,7 @@ final class BudgetLock
      *
      * @param  Builder<TModel>  $budgets  requête désignant les lignes de budget à verrouiller
      * @param  Closure(Collection<int, TModel>): TReturn  $callback
+     * @param  int<1, max>  $attempts  nombre d'essais en cas d'interblocage
      * @return TReturn
      */
     public static function run(Builder $budgets, Closure $callback, int $attempts = 3): mixed

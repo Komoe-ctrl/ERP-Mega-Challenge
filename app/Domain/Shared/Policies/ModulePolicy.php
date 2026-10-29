@@ -56,8 +56,10 @@ abstract class ModulePolicy
      */
     protected function canValidateOthers(User $user, Model $record, string $authorColumn = 'created_by'): bool
     {
+        $author = $record->getAttribute($authorColumn);
+
         return $this->allows($user, PermissionAction::Validate)
-            && (int) $record->getAttribute($authorColumn) !== $user->getKey();
+            && ! (is_numeric($author) && (int) $author === $user->getKey());
     }
 
     protected function allows(User $user, PermissionAction $action): bool

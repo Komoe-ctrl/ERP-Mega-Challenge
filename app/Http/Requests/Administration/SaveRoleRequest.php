@@ -40,12 +40,9 @@ final class SaveRoleRequest extends FormRequest
 
     public function toData(): RoleData
     {
-        /** @var array<string, mixed> $v */
-        $v = $this->validated();
-
         return new RoleData(
-            name: $v['name'],
-            permissions: array_values($v['permissions'] ?? []),
+            name: $this->string('name')->toString(),
+            permissions: array_values(array_filter((array) $this->input('permissions', []), 'is_string')),
         );
     }
 }

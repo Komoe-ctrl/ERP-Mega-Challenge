@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domain\Administration\Models;
 
 use App\Domain\Administration\Policies\SitePolicy;
+use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -25,9 +28,11 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 #[Fillable(['agency_id', 'code', 'name', 'type', 'address', 'is_active'])]
 #[UsePolicy(SitePolicy::class)]
+#[UseFactory(SiteFactory::class)]
 class Site extends Model
 {
-    use LogsActivity;
+    /** @use HasFactory<SiteFactory> */
+    use HasFactory, LogsActivity;
 
     public const TYPES = ['bureau', 'depot_central', 'magasin_chantier'];
 

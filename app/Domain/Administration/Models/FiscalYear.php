@@ -6,8 +6,11 @@ namespace App\Domain\Administration\Models;
 
 use App\Domain\Administration\Policies\FiscalYearPolicy;
 use App\Models\User;
+use Database\Factories\FiscalYearFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -29,9 +32,11 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 #[Fillable(['label', 'starts_on', 'ends_on', 'status', 'closed_at', 'closed_by'])]
 #[UsePolicy(FiscalYearPolicy::class)]
+#[UseFactory(FiscalYearFactory::class)]
 class FiscalYear extends Model
 {
-    use LogsActivity;
+    /** @use HasFactory<FiscalYearFactory> */
+    use HasFactory, LogsActivity;
 
     public const STATUS_OPEN = 'open';
 

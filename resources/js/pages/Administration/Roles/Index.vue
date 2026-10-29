@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { h } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Administration/RoleController';
 import DataTable from '@/components/DataTable.vue';
+import AdminNav from '@/components/erp/AdminNav.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,13 @@ const columns: DataTableColumn<RoleRow>[] = [
             </div>
         </div>
 
-        <DataTable :columns="columns" :data="roles" />
+        <AdminNav />
+
+        <DataTable
+            :columns="columns"
+            :data="roles"
+            :searchable="false"
+            :paginate="false"
+        />
     </div>
 </template>

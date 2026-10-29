@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import { Copy, Plus, Printer, Trash2 } from '@lucide/vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { BookOpen, Copy, Handshake, Plus, Printer, Trash2 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import TabsNav from '@/components/erp/TabsNav.vue';
@@ -12,8 +13,15 @@ import { Input } from '@/components/ui/input';
 import { usePermissions } from '@/composables/usePermissions';
 import { quoteTotals, workTotal } from '@/lib/billing';
 import { dateFr, fcfa, number, percent } from '@/lib/format';
-import { quotes } from '@/mocks/v3';
+import {
+    ouvrageComposition,
+    ouvrageCost,
+    ouvragePrice,
+    ouvrages,
+} from '@/mocks/library';
+import { contracts, quotes } from '@/mocks/v3';
 import type { QuoteDoc, QuoteStatus } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 const props = defineProps<{ id: number }>();
 
@@ -27,12 +35,34 @@ const quote = reactive<QuoteDoc>(
 );
 const tab = ref('editeur');
 const refuseOpen = ref(false);
+const libraryOpen = ref(false);
 
 // L'édition n'est possible qu'en brouillon.
 const editable = computed(
     () => quote.status === 'brouillon' && can('devis.update'),
 );
 const totals = computed(() => quoteTotals(quote));
+const contract = computed(() =>
+    contracts.find((c) =>
+        c.projectName.startsWith(quote.projectName.split(' — ')[0]),
+    ),
+);
+
+// Contrôles de saisie affichés sous les lignes invalides.
+const lineIssue = (w: QuoteDoc['works'][number]) =>
+    w.label.trim().length < 3
+        ? 'Libellé trop court.'
+        : w.quantity <= 0
+          ? 'La quantité doit être supérieure à 0.'
+          : w.unitPrice < 0
+            ? 'Le prix ne peut pas être négatif.'
+            : '';
+const issues = computed(() => quote.works.filter((w) => lineIssue(w)).length);
+const discountIssue = computed(() =>
+    quote.discountRate < 0 || quote.discountRate > 100
+        ? 'La remise doit être comprise entre 0 et 100 %.'
+        : '',
+);
 
 function addWork() {
     quote.works.push({
@@ -43,6 +73,59 @@ function addWork() {
         unitPrice: 0,
         components: '',
     });
+}
+
+// RG5.1 : un ouvrage de la bibliothèque a son prix calculé depuis sa composition.
+const libraryFields: FieldDef[] = [
+    {
+        name: 'ouvrage',
+        label: 'Ouvrage',
+        type: 'select',
+        required: true,
+        wide: true,
+        options: ouvrages.map((o) => ({
+            value: o.id,
+            label: `${o.label} — ${fcfa(ouvragePrice(o))} / ${o.unit}`,
+        })),
+    },
+    {
+        name: 'quantity',
+        label: 'Quantité',
+        type: 'number',
+        required: true,
+        min: 0.01,
+        step: 0.01,
+    },
+];
+
+function addFromLibrary(v: FieldValues) {
+    const o = ouvrages.find((x) => x.id === Number(v.ouvrage));
+
+    if (o) {
+        quote.works.push({
+            id: Date.now(),
+            label: o.label,
+            unit: o.unit,
+            quantity: Number(v.quantity),
+            unitPrice: ouvragePrice(o),
+            components: ouvrageComposition(o),
+        });
+        toast.success(
+            `Ouvrage ajouté : déboursé sec ${fcfa(ouvrageCost(o))} / ${o.unit}, prix de vente ${fcfa(ouvragePrice(o))} (maquette).`,
+        );
+    }
+}
+
+function submitQuote() {
+    if (issues.value || discountIssue.value) {
+        toast.error(
+            'Corrigez les lignes signalées avant de soumettre le devis.',
+        );
+
+        return;
+    }
+
+    setStatus('soumis', 'Devis soumis pour validation.');
 }
 
 function setStatus(status: QuoteStatus, message: string) {
@@ -66,6 +149,13 @@ function duplicate() {
         `Nouvelle version v${quote.version + 1} créée en brouillon ; la version v${quote.version} est conservée (RG5.3).`,
     );
 }
+
+function createContract() {
+    toast.success(
+        'Marché créé à partir du devis validé : le montant initial reprend celui du devis (RG6.1).',
+    );
+    router.visit('/marches');
+}
 </script>
 
 <template>
@@ -77,11 +167,7 @@ function duplicate() {
             :description="`${quote.clientName} · ${quote.projectName}`"
         >
             <StatusBadge kind="quote" :status="quote.status" />
-            <Button
-                v-if="editable"
-                @click="setStatus('soumis', 'Devis soumis pour validation.')"
-                >Soumettre</Button
-            >
+            <Button v-if="editable" @click="submitQuote">Soumettre</Button>
             <Button
                 v-if="quote.status === 'soumis' && can('devis.validate')"
                 class="bg-success text-white hover:bg-success/90"
@@ -105,6 +191,20 @@ function duplicate() {
                 variant="outline"
                 @click="duplicate"
                 ><Copy /> Dupliquer en nouvelle version</Button
+            >
+            <Button
+                v-if="
+                    quote.status === 'valide' &&
+                    !contract &&
+                    can('marches.create')
+                "
+                @click="createContract"
+                ><Handshake /> Créer le marché</Button
+            >
+            <Button v-if="contract" variant="outline" as-child
+                ><Link :href="`/marches/${contract.id}`"
+                    ><Handshake /> Voir le marché {{ contract.number }}</Link
+                ></Button
             >
         </PageHeader>
 
@@ -152,12 +252,20 @@ function duplicate() {
                                         v-if="editable"
                                         v-model="w.label"
                                         :aria-label="`Libellé ouvrage ${i + 1}`"
+                                        :aria-invalid="!!lineIssue(w)"
                                     />
                                     <template v-else>{{ w.label }}</template>
                                     <p
                                         class="mt-1 text-xs text-muted-foreground"
                                     >
                                         Composition : {{ w.components || '—' }}
+                                    </p>
+                                    <p
+                                        v-if="editable && lineIssue(w)"
+                                        class="text-sm text-destructive"
+                                        role="alert"
+                                    >
+                                        {{ lineIssue(w) }}
                                     </p>
                                 </td>
                                 <td class="p-3">{{ w.unit }}</td>
@@ -208,9 +316,14 @@ function duplicate() {
                 </div>
             </section>
 
-            <Button v-if="editable" variant="outline" @click="addWork"
-                ><Plus /> Ajouter un ouvrage</Button
-            >
+            <div v-if="editable" class="flex flex-wrap gap-2">
+                <Button variant="outline" @click="libraryOpen = true"
+                    ><BookOpen /> Ajouter depuis la bibliothèque</Button
+                >
+                <Button variant="outline" @click="addWork"
+                    ><Plus /> Ligne libre</Button
+                >
+            </div>
 
             <div class="grid gap-4 lg:grid-cols-2">
                 <section
@@ -229,6 +342,13 @@ function duplicate() {
                             class="w-24 text-right"
                         />
                     </label>
+                    <p
+                        v-if="discountIssue"
+                        class="text-sm text-destructive"
+                        role="alert"
+                    >
+                        {{ discountIssue }}
+                    </p>
                     <label
                         class="flex items-center justify-between gap-3 text-sm"
                         >TVA (%)
@@ -395,6 +515,14 @@ function duplicate() {
             require-reason
             destructive
             @confirm="onRefuse"
+        />
+        <FormDialog
+            v-model:open="libraryOpen"
+            title="Ajouter un ouvrage de la bibliothèque"
+            description="Le prix est calculé à partir de la composition (articles du référentiel et main-d’œuvre)."
+            :fields="libraryFields"
+            submit-label="Ajouter"
+            @submit="addFromLibrary"
         />
     </div>
 </template>

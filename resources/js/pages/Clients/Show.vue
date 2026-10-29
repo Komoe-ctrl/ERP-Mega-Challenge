@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import { FileText, Mail, Phone } from '@lucide/vue';
 import { computed } from 'vue';
 import EmptyState from '@/components/erp/EmptyState.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
@@ -8,6 +9,7 @@ import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { computeSituation, contractTotals } from '@/lib/billing';
 import { dateFr, fcfa } from '@/lib/format';
 import { projects } from '@/mocks/chantiers';
+import { clientExtras } from '@/mocks/library';
 import { clients, clientTypeLabels, contracts, situations } from '@/mocks/v3';
 
 const props = defineProps<{ id: number }>();
@@ -19,7 +21,7 @@ defineOptions({
 const client = computed(
     () => clients.find((c) => c.id === props.id) ?? clients[0],
 );
-// CA2 : en un écran, projets en cours et montant des créances.
+// CA2 : en un écran, projets en cours et montant des créances. RG2.2 : agrège projets, marchés, situations, paiements, solde.
 const clientProjects = computed(() =>
     projects.filter((p) => p.clientName === client.value.name),
 );
@@ -28,6 +30,14 @@ const clientContracts = computed(() =>
 );
 const clientSituations = computed(() =>
     situations.filter((s) => s.clientName === client.value.name),
+);
+const extras = computed(
+    () =>
+        clientExtras[client.value.id] ?? {
+            contacts: [],
+            documents: [],
+            payments: [],
+        },
 );
 const due = computed(() => client.value.invoiced - client.value.paid);
 </script>
@@ -67,10 +77,36 @@ const due = computed(() => client.value.invoiced - client.value.paid);
 
         <div class="grid gap-4 lg:grid-cols-2">
             <section class="rounded-xl border bg-card p-4 shadow-xs">
-                <h2 class="mb-3 font-display font-semibold">Contact</h2>
-                <p class="text-sm">{{ client.contact }}</p>
-                <p class="text-sm text-muted-foreground">{{ client.phone }}</p>
+                <h2 class="mb-3 font-display font-semibold">Contacts</h2>
+                <ul v-if="extras.contacts.length" class="divide-y text-sm">
+                    <li
+                        v-for="c in extras.contacts"
+                        :key="c.email"
+                        class="py-2.5"
+                    >
+                        <p class="font-medium">
+                            {{ c.name }}
+                            <span class="font-normal text-muted-foreground"
+                                >— {{ c.role }}</span
+                            >
+                        </p>
+                        <p
+                            class="flex flex-wrap gap-x-4 text-xs text-muted-foreground"
+                        >
+                            <span class="inline-flex items-center gap-1"
+                                ><Phone class="size-3" /> {{ c.phone }}</span
+                            >
+                            <span class="inline-flex items-center gap-1"
+                                ><Mail class="size-3" /> {{ c.email }}</span
+                            >
+                        </p>
+                    </li>
+                </ul>
+                <p v-else class="text-sm">
+                    {{ client.contact }} · {{ client.phone }}
+                </p>
             </section>
+
             <section class="rounded-xl border bg-card p-4 shadow-xs">
                 <h2 class="mb-3 font-display font-semibold">
                     Projets associés
@@ -112,7 +148,12 @@ const due = computed(() => client.value.invoiced - client.value.paid);
                             )"
                             :key="s.id"
                         >
-                            Situation n°{{ s.number }} ({{ dateFr(s.date) }}) :
+                            <Link
+                                :href="`/situations/${s.id}`"
+                                class="hover:underline"
+                                >Situation n°{{ s.number }}</Link
+                            >
+                            ({{ dateFr(s.date) }}) :
                             {{ fcfa(computeSituation(s).netTtc) }} TTC
                             <StatusBadge
                                 kind="situation"
@@ -125,5 +166,47 @@ const due = computed(() => client.value.invoiced - client.value.paid);
             </ul>
             <EmptyState v-else compact title="Aucun marché" />
         </section>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+            <section class="rounded-xl border bg-card p-4 shadow-xs">
+                <h2 class="mb-3 font-display font-semibold">Paiements reçus</h2>
+                <ul v-if="extras.payments.length" class="divide-y text-sm">
+                    <li
+                        v-for="p in extras.payments"
+                        :key="p.date + p.label"
+                        class="flex items-center justify-between gap-2 py-2.5"
+                    >
+                        <span
+                            >{{ p.label
+                            }}<span
+                                class="block text-xs text-muted-foreground"
+                                >{{ dateFr(p.date) }}</span
+                            ></span
+                        >
+                        <span class="tabular-nums">{{ fcfa(p.amount) }}</span>
+                    </li>
+                </ul>
+                <EmptyState v-else compact title="Aucun paiement" />
+            </section>
+            <section class="rounded-xl border bg-card p-4 shadow-xs">
+                <h2 class="mb-3 font-display font-semibold">Documents</h2>
+                <ul v-if="extras.documents.length" class="divide-y text-sm">
+                    <li
+                        v-for="d in extras.documents"
+                        :key="d.name"
+                        class="flex items-center gap-3 py-2.5"
+                    >
+                        <FileText class="size-4 text-muted-foreground" />
+                        <span class="min-w-0 flex-1 truncate">{{
+                            d.name
+                        }}</span>
+                        <span class="text-xs text-muted-foreground">{{
+                            dateFr(d.date)
+                        }}</span>
+                    </li>
+                </ul>
+                <EmptyState v-else compact title="Aucun document" />
+            </section>
+        </div>
     </div>
 </template>

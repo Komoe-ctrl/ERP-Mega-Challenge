@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Shared\Support\ModuleNavigation;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -40,8 +41,11 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'roles' => $request->user()?->getRoleNames()->values() ?? [],
+                'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
             ],
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'navigation' => ModuleNavigation::for($request->user()),
+                        'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
 }

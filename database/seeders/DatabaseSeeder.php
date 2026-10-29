@@ -1,25 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/**
+ * Données de base de l'ERP. Tous les seeders sont rejouables : ils ne
+ * recréent ni n'écrasent ce qu'un administrateur a déjà ajusté.
+ */
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            SettingsSeeder::class,
+            OrganizationSeeder::class,
+            FiscalYearSeeder::class,
+            AdminUserSeeder::class,
         ]);
     }
 }

@@ -39,6 +39,8 @@ Route::middleware(['auth', 'verified', 'can:projets.view'])->prefix('projets')->
 // --- V1 : Chantiers (M7) ---------------------------------------------------
 Route::middleware(['auth', 'verified', 'can:chantiers.view'])->prefix('chantiers')->name('chantiers.')->group(function () {
     Route::inertia('/', 'Chantiers/Index')->name('index');
+    Route::inertia('creer', 'Chantiers/Form')->name('create');
+    Route::get('{id}/modifier', fn (int $id) => Inertia::render('Chantiers/Form', ['id' => $id]))->whereNumber('id')->name('edit');
     Route::get('{id}', fn (int $id) => Inertia::render('Chantiers/Show', ['id' => $id]))->whereNumber('id')->name('show');
     Route::get('{id}/avancement', fn (int $id) => Inertia::render('Chantiers/Avancement', ['id' => $id]))->whereNumber('id')->name('avancement');
     Route::get('{id}/rapport', fn (int $id) => Inertia::render('Chantiers/Rapport', ['id' => $id]))->whereNumber('id')->name('rapport');
@@ -48,6 +50,7 @@ Route::middleware(['auth', 'verified', 'can:chantiers.view'])->prefix('chantiers
 Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
     Route::inertia('demandes', 'Achats/Demandes/Index')->name('demandes');
     Route::inertia('demandes/creer', 'Achats/Demandes/Create')->name('demandes.create');
+    Route::get('demandes/{id}/modifier', fn (int $id) => Inertia::render('Achats/Demandes/Create', ['id' => $id]))->whereNumber('id')->name('demandes.edit');
     Route::get('demandes/{id}', fn (int $id) => Inertia::render('Achats/Demandes/Show', ['id' => $id]))->whereNumber('id')->name('demandes.show');
     Route::inertia('a-valider', 'Achats/Demandes/AValider')->name('a-valider');
     // V2 : processus achat complet (consultation, commande, réception, facture)
@@ -100,6 +103,8 @@ Route::middleware(['auth', 'verified', 'can:main_oeuvre.view'])->prefix('main-oe
 Route::middleware(['auth', 'verified', 'can:rh.view'])->prefix('rh')->name('rh.')->group(function () {
     Route::inertia('/', 'Rh/Index')->name('index');
     Route::inertia('conges', 'Rh/Conges')->name('conges');
+    Route::get('{id}', fn (int $id) => Inertia::render('Rh/Employe', ['id' => $id]))->whereNumber('id')->name('show');
+    Route::get('{id}/bulletin', fn (int $id) => Inertia::render('Rh/Bulletin', ['id' => $id]))->whereNumber('id')->name('bulletin');
     Route::inertia('avances', 'Rh/Avances')->name('avances');
 });
 Route::middleware(['auth', 'verified', 'can:engins.view'])->prefix('engins')->name('engins.')->group(function () {

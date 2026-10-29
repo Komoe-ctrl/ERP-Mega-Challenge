@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
+import { Plus } from '@lucide/vue';
 import { h } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { badgeCell, linkCell } from '@/lib/cells';
@@ -16,6 +19,8 @@ import type { Chantier } from '@/types/erp';
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
+
+const { can } = usePermissions();
 
 type Row = Chantier & { progress: number; late: number };
 
@@ -94,7 +99,11 @@ const filters: DataTableFilter[] = [
         <PageHeader
             title="Chantiers"
             description="Un utilisateur de terrain ne voit que les chantiers auxquels il est affecté."
-        />
+        >
+            <Button v-if="can('chantiers.create')" as-child>
+                <Link href="/chantiers/creer"><Plus /> Nouveau chantier</Link>
+            </Button>
+        </PageHeader>
         <DataTable
             :columns="columns"
             :data="rows"

@@ -74,6 +74,45 @@ Route::middleware(['auth', 'verified', 'can:stocks.view'])->prefix('stocks')->na
     Route::inertia('inventaire', 'Stocks/Inventaire')->name('inventaire');
 });
 
+// --- V3 : Clients (M2), Devis (M5), Marchés (M6), Situations (M11) ---------
+Route::middleware(['auth', 'verified', 'can:clients.view'])->prefix('clients')->name('clients.')->group(function () {
+    Route::inertia('/', 'Clients/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Clients/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+Route::middleware(['auth', 'verified', 'can:devis.view'])->prefix('devis')->name('devis.')->group(function () {
+    Route::inertia('/', 'Devis/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Devis/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+Route::middleware(['auth', 'verified', 'can:marches.view'])->prefix('marches')->name('marches.')->group(function () {
+    Route::inertia('/', 'Marches/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Marches/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+Route::middleware(['auth', 'verified', 'can:situations.view'])->prefix('situations')->name('situations.')->group(function () {
+    Route::inertia('/', 'Situations/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Situations/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+
+// --- V4 : Main-d'œuvre (M12), RH (M13), Engins (M14), Finance (M15) --------
+Route::middleware(['auth', 'verified', 'can:main_oeuvre.view'])->prefix('main-oeuvre')->name('main_oeuvre.')->group(function () {
+    Route::inertia('/', 'MainOeuvre/Pointage')->name('pointage');
+});
+Route::middleware(['auth', 'verified', 'can:rh.view'])->prefix('rh')->name('rh.')->group(function () {
+    Route::inertia('/', 'Rh/Index')->name('index');
+    Route::inertia('conges', 'Rh/Conges')->name('conges');
+    Route::inertia('avances', 'Rh/Avances')->name('avances');
+});
+Route::middleware(['auth', 'verified', 'can:engins.view'])->prefix('engins')->name('engins.')->group(function () {
+    Route::inertia('/', 'Engins/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Engins/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+Route::middleware(['auth', 'verified', 'can:finance.view'])->prefix('finance')->name('finance.')->group(function () {
+    Route::inertia('/', 'Finance/Index')->name('index');
+    Route::inertia('caisse', 'Finance/Operations', ['account' => 'caisse'])->name('caisse');
+    Route::inertia('banque', 'Finance/Operations', ['account' => 'banque'])->name('banque');
+    Route::inertia('rentabilite', 'Finance/Rentabilite')->name('rentabilite');
+    Route::inertia('tresorerie', 'Finance/Tresorerie')->name('tresorerie');
+});
+
 // --- V1 : Budget chantier (M10) -------------------------------------------
 Route::middleware(['auth', 'verified', 'can:budget.view'])->prefix('budget')->name('budget.')->group(function () {
     Route::inertia('/', 'Budget/Index')->name('index');

@@ -45,6 +45,14 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
             ],
             'navigation' => ModuleNavigation::for($request->user()),
+            // Sélecteur de profil de la démo : uniquement en environnement local.
+            'demo' => app()->isLocal() ? [
+                'current' => $request->user()?->getRoleNames()->first(),
+                'roles' => array_map(
+                    fn (RoleName $role): array => ['value' => $role->value, 'label' => $role->label()],
+                    RoleName::cases(),
+                ),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

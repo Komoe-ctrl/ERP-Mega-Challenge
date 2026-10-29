@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { LayoutGrid } from '@lucide/vue';
+import { Bell, LayoutGrid } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
+import RoleSwitcher from '@/components/erp/RoleSwitcher.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -15,10 +16,13 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { moduleIcon } from '@/lib/moduleIcons';
+import { notifications } from '@/mocks/transverse';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
+
+const unread = notifications.filter((n) => !n.read).length;
 
 // Le menu est construit côté serveur selon les droits de l'utilisateur
 // (module activé + permission `<module>.view`) : un module sans droit n'apparaît pas.
@@ -27,6 +31,12 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: 'Tableau de bord',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Notifications',
+        href: '/notifications',
+        icon: Bell,
+        badge: unread,
     },
     ...page.props.navigation.map((module) => ({
         title: module.title,
@@ -55,6 +65,7 @@ const mainNavItems = computed<NavItem[]>(() => [
         </SidebarContent>
 
         <SidebarFooter>
+            <RoleSwitcher />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

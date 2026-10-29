@@ -89,7 +89,20 @@ enum Module: string
     {
         return match ($this) {
             self::Administration => 'administration.users.index',
-            default => null,
+            self::Clients => 'clients.index',
+            self::Fournisseurs => 'fournisseurs.index',
+            self::Projets => 'projets.index',
+            self::Devis => 'devis.index',
+            self::Marches => 'marches.index',
+            self::Chantiers => 'chantiers.index',
+            self::Achats => 'achats.demandes',
+            self::Stocks => 'stocks.index',
+            self::Budget => 'budget.index',
+            self::Situations => 'situations.index',
+            self::MainOeuvre => 'main_oeuvre.pointage',
+            self::Rh => 'rh.index',
+            self::Engins => 'engins.index',
+            self::Finance => 'finance.index',
         };
     }
 

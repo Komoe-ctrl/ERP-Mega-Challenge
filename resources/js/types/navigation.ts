@@ -11,6 +11,7 @@ export type NavItem = {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon;
     isActive?: boolean;
+    badge?: number;
 };
 
 /** Entrée de menu d'un module, calculée côté serveur selon les droits. */

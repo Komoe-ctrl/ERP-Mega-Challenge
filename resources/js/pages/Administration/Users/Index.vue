@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { h, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Administration/UserController';
 import DataTable from '@/components/DataTable.vue';
+import AdminNav from '@/components/erp/AdminNav.vue';
 import Heading from '@/components/Heading.vue';
 import PaginationBar from '@/components/PaginationBar.vue';
 import { Badge } from '@/components/ui/badge';
@@ -157,6 +158,8 @@ const columns: DataTableColumn<UserRow>[] = [
             </div>
         </div>
 
+        <AdminNav />
+
         <form class="flex gap-2" @submit.prevent="submitSearch">
             <Input
                 v-model="search"
@@ -167,7 +170,12 @@ const columns: DataTableColumn<UserRow>[] = [
             <Button type="submit" variant="secondary">Rechercher</Button>
         </form>
 
-        <DataTable :columns="columns" :data="users.data" />
+        <DataTable
+            :columns="columns"
+            :data="users.data"
+            :searchable="false"
+            :paginate="false"
+        />
         <PaginationBar :page="users" />
     </div>
 </template>

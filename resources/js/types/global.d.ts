@@ -21,6 +21,10 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             navigation: ModuleNavItem[];
+            demo: {
+                current: string | null;
+                roles: { value: string; label: string }[];
+            } | null;
             sidebarOpen: boolean;
             [key: string]: unknown;
         };

@@ -7,6 +7,7 @@ namespace App\Domain\Shared\Support;
 use App\Domain\Shared\Enums\Module;
 use App\Domain\Shared\Enums\PermissionAction;
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 
 /**
  * Entrées du menu latéral : un module n'apparaît que s'il est activé, s'il a
@@ -29,7 +30,7 @@ final class ModuleNavigation
         foreach (Module::cases() as $module) {
             $route = $module->entryRoute();
 
-            if ($route === null
+            if (! Route::has($route)
                 || ! $module->isEnabled()
                 || ! $user->can($module->permission(PermissionAction::View))) {
                 continue;

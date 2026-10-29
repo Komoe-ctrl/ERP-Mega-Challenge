@@ -15,7 +15,7 @@ return [
     */
     'modules_enabled' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('ERP_MODULES_ENABLED', 'administration')),
+        explode(',', (string) env('ERP_MODULES_ENABLED', 'administration,clients,fournisseurs,projets,devis,marches,chantiers,achats,stocks,budget,situations,main_oeuvre,rh,engins,finance')),
     ))),
 
     /*

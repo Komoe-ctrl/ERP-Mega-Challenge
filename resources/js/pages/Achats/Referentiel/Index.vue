@@ -4,6 +4,8 @@ import { Plus } from '@lucide/vue';
 import { computed } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import SubNav from '@/components/erp/SubNav.vue';
+import { achatsNav } from '@/lib/navs';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { amountCell, linkCell, toneBadgeCell } from '@/lib/cells';
@@ -90,7 +92,7 @@ const filters: DataTableFilter[] = [
         >
             <Button v-if="isPurchasing" as-child>
                 <Link href="/achats/referentiel/creer"
-                    ><Plus /> Nouvel article</Link
+                    ><Plus /> <SubNav :links="achatsNav" /> Nouvel article</Link
                 >
             </Button>
         </PageHeader>

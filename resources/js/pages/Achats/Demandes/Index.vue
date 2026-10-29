@@ -3,6 +3,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import { BookOpen, ClipboardCheck, Plus } from '@lucide/vue';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import SubNav from '@/components/erp/SubNav.vue';
+import { achatsNav } from '@/lib/navs';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
@@ -95,6 +97,8 @@ const filters: DataTableFilter[] = [
                 >
             </Button>
         </PageHeader>
+
+        <SubNav :links="achatsNav" />
 
         <DataTable
             :columns="columns"

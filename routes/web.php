@@ -49,9 +49,29 @@ Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->na
     Route::inertia('demandes/creer', 'Achats/Demandes/Create')->name('demandes.create');
     Route::get('demandes/{id}', fn (int $id) => Inertia::render('Achats/Demandes/Show', ['id' => $id]))->whereNumber('id')->name('demandes.show');
     Route::inertia('a-valider', 'Achats/Demandes/AValider')->name('a-valider');
+    // V2 : processus achat complet (consultation, commande, réception, facture)
+    Route::inertia('consultations', 'Achats/Consultations/Index')->name('consultations');
+    Route::get('consultations/{id}', fn (int $id) => Inertia::render('Achats/Consultations/Show', ['id' => $id]))->whereNumber('id')->name('consultations.show');
+    Route::inertia('commandes', 'Achats/Commandes/Index')->name('commandes');
+    Route::get('commandes/{id}', fn (int $id) => Inertia::render('Achats/Commandes/Show', ['id' => $id]))->whereNumber('id')->name('commandes.show');
+    Route::inertia('receptions', 'Achats/Receptions/Index')->name('receptions');
+    Route::inertia('factures', 'Achats/Factures/Index')->name('factures');
     Route::inertia('referentiel', 'Achats/Referentiel/Index')->name('referentiel');
     Route::inertia('referentiel/creer', 'Achats/Referentiel/Form')->name('referentiel.create');
     Route::get('referentiel/{id}', fn (int $id) => Inertia::render('Achats/Referentiel/Form', ['id' => $id]))->whereNumber('id')->name('referentiel.edit');
+});
+
+// --- V2 : Fournisseurs (M3) ---------------------------------------------------
+Route::middleware(['auth', 'verified', 'can:fournisseurs.view'])->prefix('fournisseurs')->name('fournisseurs.')->group(function () {
+    Route::inertia('/', 'Fournisseurs/Index')->name('index');
+    Route::get('{id}', fn (int $id) => Inertia::render('Fournisseurs/Show', ['id' => $id]))->whereNumber('id')->name('show');
+});
+
+// --- V2 : Stocks BTP (M9) ----------------------------------------------------
+Route::middleware(['auth', 'verified', 'can:stocks.view'])->prefix('stocks')->name('stocks.')->group(function () {
+    Route::inertia('/', 'Stocks/Index')->name('index');
+    Route::inertia('mouvements', 'Stocks/Mouvements')->name('mouvements');
+    Route::inertia('inventaire', 'Stocks/Inventaire')->name('inventaire');
 });
 
 // --- V1 : Budget chantier (M10) -------------------------------------------

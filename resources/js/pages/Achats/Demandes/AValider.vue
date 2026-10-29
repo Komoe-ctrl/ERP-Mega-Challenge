@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import SubNav from '@/components/erp/SubNav.vue';
+import { achatsNav } from '@/lib/navs';
 import EmptyState from '@/components/erp/EmptyState.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
@@ -43,6 +45,7 @@ const pending = requests
             title="Demandes à valider"
             :description="`${pending.length} demande(s) en attente de décision.`"
         />
+        <SubNav :links="achatsNav" />
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article

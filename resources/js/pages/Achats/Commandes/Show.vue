@@ -9,6 +9,7 @@ import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa, number } from '@/lib/format';
 import { achatsNav } from '@/lib/navs';
+import { requests } from '@/mocks/achats';
 import { invoices, orders, receptions } from '@/mocks/v2';
 
 const props = defineProps<{ id: number }>();
@@ -131,7 +132,12 @@ const orderInvoices = computed(() =>
                 />
                 <ul class="divide-y text-sm">
                     <li v-for="r in orderReceptions" :key="r.id" class="py-2">
-                        {{ r.number }} — {{ dateFr(r.date) }}
+                        <Link
+                            href="/achats/receptions"
+                            class="hover:underline"
+                            >{{ r.number }}</Link
+                        >
+                        — {{ dateFr(r.date) }}
                     </li>
                 </ul>
                 <p
@@ -146,7 +152,16 @@ const orderInvoices = computed(() =>
                     Demandes et factures liées
                 </h2>
                 <p class="text-sm">
-                    Demandes : {{ order.requestNumbers.join(', ') }}
+                    Demandes :
+                    <template v-for="(n, i) in order.requestNumbers" :key="n">
+                        <Link
+                            :href="`/achats/demandes/${requests.find((r) => r.number === n)?.id ?? ''}`"
+                            class="hover:underline"
+                            >{{ n }}</Link
+                        ><template v-if="i < order.requestNumbers.length - 1"
+                            >,
+                        </template>
+                    </template>
                 </p>
                 <ul class="divide-y text-sm">
                     <li

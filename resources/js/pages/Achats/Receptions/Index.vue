@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
-import { dateFr, number } from '@/lib/format';
+import { dateFr, number, TODAY } from '@/lib/format';
 import { achatsNav } from '@/lib/navs';
-import { receptions } from '@/mocks/v2';
+import { orders, receptions } from '@/mocks/v2';
+import type { Reception } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 defineOptions({
     layout: {
@@ -21,6 +25,79 @@ defineOptions({
 });
 
 const { can } = usePermissions();
+const rows = ref<Reception[]>(receptions.map((r) => ({ ...r })));
+const createOpen = ref(false);
+
+const receivable = computed(() =>
+    orders.filter((o) => ['emis', 'partiel'].includes(o.status)),
+);
+const fields = computed<FieldDef[]>(() => [
+    {
+        name: 'order',
+        label: 'Bon de commande',
+        type: 'select',
+        required: true,
+        wide: true,
+        options: receivable.value.map((o) => ({
+            value: o.number,
+            label: `${o.number} — ${o.supplierName}`,
+        })),
+    },
+    {
+        name: 'received',
+        label: 'Quantité totale reçue',
+        type: 'number',
+        required: true,
+        min: 0,
+        step: 1,
+        hint: 'Quantité réellement livrée. Un écart avec la commande génère un reliquat ou un retour (RG8.9).',
+    },
+    {
+        name: 'date',
+        label: 'Date de réception',
+        type: 'date',
+        required: true,
+        validate: (v) =>
+            v && String(v) > TODAY
+                ? 'La réception ne peut pas être dans le futur.'
+                : null,
+    },
+    { name: 'note', label: 'Observations', type: 'textarea' },
+]);
+
+function create(v: FieldValues) {
+    const order = orders.find((o) => o.number === v.order);
+
+    if (!order) {
+        return;
+    }
+
+    const ordered = order.lines.reduce((s, l) => s + l.ordered, 0);
+    const received = Number(v.received);
+    const gap: Reception['gap'] =
+        received === ordered
+            ? 'conforme'
+            : received < ordered
+              ? 'reliquat'
+              : 'retour';
+
+    rows.value.unshift({
+        id: Date.now(),
+        number: `BR-2026-00${209 + rows.value.length - receptions.length}`,
+        orderNumber: order.number,
+        supplierName: order.supplierName,
+        date: String(v.date),
+        gap,
+        lines: [{ label: 'Total de la commande', ordered, received, unit: '' }],
+    });
+    toast.success(
+        gap === 'conforme'
+            ? 'Réception conforme : entrée en stock (maquette).'
+            : gap === 'reliquat'
+              ? 'Réception partielle : un reliquat reste à livrer (maquette).'
+              : 'Quantité supérieure à la commande : un retour est généré (maquette).',
+    );
+}
 </script>
 
 <template>
@@ -33,7 +110,7 @@ const { can } = usePermissions();
         >
             <Button
                 v-if="can('stocks.create') || can('achats.create')"
-                @click="toast.success('Nouvelle réception (maquette).')"
+                @click="createOpen = true"
                 ><Plus /> Enregistrer une réception</Button
             >
         </PageHeader>
@@ -41,7 +118,7 @@ const { can } = usePermissions();
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article
-                v-for="r in receptions"
+                v-for="r in rows"
                 :key="r.id"
                 class="space-y-3 rounded-xl border bg-card p-4 shadow-xs"
             >
@@ -49,8 +126,13 @@ const { can } = usePermissions();
                     <div>
                         <p class="font-display font-semibold">{{ r.number }}</p>
                         <p class="text-sm text-muted-foreground">
-                            {{ r.supplierName }} · {{ r.orderNumber }} ·
-                            {{ dateFr(r.date) }}
+                            {{ r.supplierName }} ·
+                            <Link
+                                :href="`/achats/commandes/${orders.find((o) => o.number === r.orderNumber)?.id ?? ''}`"
+                                class="hover:underline"
+                                >{{ r.orderNumber }}</Link
+                            >
+                            · {{ dateFr(r.date) }}
                         </p>
                     </div>
                     <StatusBadge kind="reception" :status="r.gap" />
@@ -90,5 +172,12 @@ const { can } = usePermissions();
                 </table>
             </article>
         </div>
+
+        <FormDialog
+            v-model:open="createOpen"
+            title="Enregistrer une réception"
+            :fields="fields"
+            @submit="create"
+        />
     </div>
 </template>

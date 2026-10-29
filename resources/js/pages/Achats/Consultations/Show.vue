@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { AlertTriangle, Trophy } from '@lucide/vue';
+import { AlertTriangle, Plus, Trophy } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import SubNav from '@/components/erp/SubNav.vue';
@@ -10,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { fcfa } from '@/lib/format';
 import { achatsNav } from '@/lib/navs';
-import { consultations } from '@/mocks/v2';
+import { consultations, suppliers } from '@/mocks/v2';
+import type { Quote } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 const props = defineProps<{ id: number }>();
 
@@ -27,25 +30,69 @@ const { can } = usePermissions();
 const consultation = computed(
     () => consultations.find((c) => c.id === props.id) ?? consultations[0],
 );
+const extraQuotes = ref<Quote[]>([]);
+const quotes = computed(() => [
+    ...consultation.value.quotes,
+    ...extraQuotes.value,
+]);
 const sorted = computed(() =>
-    [...consultation.value.quotes].sort((a, b) => a.unitTotal - b.unitTotal),
+    [...quotes.value].sort((a, b) => a.unitTotal - b.unitTotal),
 );
 const best = computed(() => sorted.value[0]);
 const fastest = computed(
-    () =>
-        [...consultation.value.quotes].sort(
-            (a, b) => a.delayDays - b.delayDays,
-        )[0],
+    () => [...quotes.value].sort((a, b) => a.delayDays - b.delayDays)[0],
 );
 const missing = computed(() =>
-    Math.max(
-        0,
-        consultation.value.minSuppliers - consultation.value.quotes.length,
-    ),
+    Math.max(0, consultation.value.minSuppliers - quotes.value.length),
 );
 const chosen = ref<number | null>(
     consultation.value.quotes.find((q) => q.selected)?.supplierId ?? null,
 );
+const attributed = computed(() => consultation.value.status === 'attribuee');
+const offerOpen = ref(false);
+
+const offerFields = computed<FieldDef[]>(() => [
+    {
+        name: 'supplier',
+        label: 'Fournisseur',
+        type: 'select',
+        required: true,
+        options: suppliers
+            .filter((s) => !quotes.value.some((q) => q.supplierId === s.id))
+            .map((s) => ({ value: s.id, label: s.name })),
+        wide: true,
+    },
+    {
+        name: 'amount',
+        label: 'Total HT proposé',
+        type: 'number',
+        required: true,
+        min: 1,
+        step: 1,
+        unit: 'FCFA',
+    },
+    {
+        name: 'delay',
+        label: 'Délai de livraison',
+        type: 'number',
+        required: true,
+        min: 0,
+        step: 1,
+        unit: 'jours',
+    },
+]);
+
+function addOffer(v: FieldValues) {
+    const supplier = suppliers.find((s) => s.id === Number(v.supplier));
+
+    extraQuotes.value.push({
+        supplierId: Number(v.supplier),
+        supplierName: supplier?.name ?? '',
+        unitTotal: Number(v.amount),
+        delayDays: Number(v.delay),
+    });
+    toast.success('Offre enregistrée (maquette).');
+}
 
 function choose() {
     toast.success(
@@ -63,6 +110,12 @@ function choose() {
             :description="`${consultation.requestNumber} · ${consultation.chantierName}`"
         >
             <StatusBadge kind="consultation" :status="consultation.status" />
+            <Button
+                v-if="can('achats.update') && !attributed"
+                variant="outline"
+                @click="offerOpen = true"
+                ><Plus /> Ajouter une offre</Button
+            >
         </PageHeader>
         <SubNav :links="achatsNav" />
 
@@ -78,7 +131,10 @@ function choose() {
             avant de commander.
         </p>
 
-        <section class="overflow-hidden rounded-xl border bg-card shadow-xs">
+        <section
+            v-if="quotes.length"
+            class="overflow-hidden rounded-xl border bg-card shadow-xs"
+        >
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead class="bg-muted/50 text-left text-muted-foreground">
@@ -110,13 +166,19 @@ function choose() {
                                     type="radio"
                                     name="offer"
                                     :value="q.supplierId"
-                                    :disabled="!can('achats.update')"
+                                    :disabled="
+                                        !can('achats.update') || attributed
+                                    "
                                     :aria-label="`Retenir ${q.supplierName}`"
                                     class="size-4"
                                 />
                             </td>
                             <td class="p-3 font-medium">
-                                {{ q.supplierName }}
+                                <Link
+                                    :href="`/fournisseurs/${q.supplierId}`"
+                                    class="hover:underline"
+                                    >{{ q.supplierName }}</Link
+                                >
                                 <Trophy
                                     v-if="q.supplierId === best.supplierId"
                                     class="ml-1 inline size-4 text-brand"
@@ -157,22 +219,30 @@ function choose() {
                 </table>
             </div>
         </section>
+        <p
+            v-else
+            class="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground"
+        >
+            Aucune offre reçue pour l’instant.
+        </p>
 
         <div class="flex flex-wrap gap-2">
             <Button
                 v-if="can('achats.update')"
-                :disabled="
-                    chosen === null ||
-                    missing > 0 ||
-                    consultation.status === 'attribuee'
-                "
+                :disabled="chosen === null || missing > 0 || attributed"
                 @click="choose"
+                >Retenir ce fournisseur et créer le bon de commande</Button
             >
-                Retenir ce fournisseur et créer le bon de commande
-            </Button>
             <Button variant="outline" as-child
                 ><Link href="/achats/consultations">Retour</Link></Button
             >
         </div>
+
+        <FormDialog
+            v-model:open="offerOpen"
+            title="Ajouter une offre"
+            :fields="offerFields"
+            @submit="addOffer"
+        />
     </div>
 </template>

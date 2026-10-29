@@ -1,47 +1,49 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import PlaceholderPattern from '@/components/PlaceholderPattern.vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import Heading from '@/components/Heading.vue';
+import { moduleIcon } from '@/lib/moduleIcons';
 import { dashboard } from '@/routes';
 
 defineOptions({
     layout: {
         breadcrumbs: [
             {
-                title: 'Dashboard',
+                title: 'Tableau de bord',
                 href: dashboard(),
             },
         ],
     },
 });
+
+const page = usePage();
+const user = computed(() => page.props.auth.user);
+const modules = computed(() => page.props.navigation);
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Tableau de bord" />
 
-    <div
-        class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4"
-    >
-        <div class="grid auto-rows-min gap-4 md:grid-cols-3">
-            <div
-                class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
+    <div class="space-y-6 p-4">
+        <Heading
+            :title="`Bonjour, ${user.name}`"
+            description="Accédez aux modules de l’ERP auxquels votre profil donne droit."
+        />
+
+        <p v-if="modules.length === 0" class="text-sm text-muted-foreground">
+            Aucun module n’est encore disponible pour votre profil.
+        </p>
+
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+                v-for="module in modules"
+                :key="module.key"
+                :href="module.href"
+                class="flex items-center gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/50"
             >
-                <PlaceholderPattern />
-            </div>
-            <div
-                class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-            >
-                <PlaceholderPattern />
-            </div>
-            <div
-                class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-            >
-                <PlaceholderPattern />
-            </div>
-        </div>
-        <div
-            class="relative min-h-[100vh] flex-1 rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border"
-        >
-            <PlaceholderPattern />
+                <component :is="moduleIcon(module.icon)" class="size-6" />
+                <span class="font-medium">{{ module.title }}</span>
+            </Link>
         </div>
     </div>
 </template>

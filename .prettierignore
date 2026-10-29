@@ -1,0 +1,12 @@
+vendor
+node_modules
+public
+storage
+bootstrap/cache
+resources/js/actions
+resources/js/routes
+resources/js/wayfinder
+resources/js/components/ui
+resources/views
+composer.lock
+package-lock.json

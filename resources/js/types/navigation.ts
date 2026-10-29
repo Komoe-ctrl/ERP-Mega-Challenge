@@ -12,3 +12,11 @@ export type NavItem = {
     icon?: LucideIcon;
     isActive?: boolean;
 };
+
+/** Entrée de menu d'un module, calculée côté serveur selon les droits. */
+export type ModuleNavItem = {
+    key: string;
+    title: string;
+    icon: string;
+    href: string;
+};

@@ -15,6 +15,8 @@ import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
 // oxfmt-ignore
 type Props = {
     passwordRules: string;
+} & ManagePasskeysProps &
+    ManageTwoFactorProps;
 
 const props = defineProps<Props>();
 

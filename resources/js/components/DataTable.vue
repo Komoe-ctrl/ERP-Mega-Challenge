@@ -54,7 +54,12 @@ const table = useTable({
     features: dataTableFeatures,
     columns: props.columns,
     data: rows,
-    initialState: { pagination: { pageIndex: 0, pageSize: props.pageSize } },
+    initialState: {
+        pagination: {
+            pageIndex: 0,
+            pageSize: props.paginate ? props.pageSize : 100_000,
+        },
+    },
 });
 
 const search = ref('');

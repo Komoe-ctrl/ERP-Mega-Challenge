@@ -42,6 +42,12 @@ class AdminUserSeeder extends Seeder
             $user->save();
         }
 
+        // Poste affiché dans l'en-tête ; mis à jour aussi pour un compte déjà existant.
+        $user->forceFill([
+            'job_title' => RoleName::Administrateur->defaultJobTitle(),
+            'service_id' => Service::query()->where('code', 'ADM')->value('id'),
+        ])->save();
+
         $user->assignRole(RoleName::Administrateur->value);
     }
 }

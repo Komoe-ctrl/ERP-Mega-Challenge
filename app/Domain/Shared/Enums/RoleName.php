@@ -39,6 +39,43 @@ enum RoleName: string
         };
     }
 
+    /** Poste par défaut d'un compte de ce profil (affiché dans l'en-tête avec le service). */
+    public function defaultJobTitle(): string
+    {
+        return match ($this) {
+            self::Administrateur => 'Administrateur',
+            self::DirectionGenerale => 'Directeur général',
+            self::DirectionTechnique => 'Directeur technique',
+            self::ServiceAchatsBtp => 'Responsable achats BTP',
+            self::ConducteurTravaux => 'Conducteur de travaux',
+            self::ChefChantier => 'Chef de chantier',
+            self::Magasinier => 'Magasinier',
+            self::Comptabilite => 'Comptable',
+            self::Finance => 'Responsable financier',
+            self::RessourcesHumaines => 'Chargée des ressources humaines',
+        };
+    }
+
+    /**
+     * Page d'arrivée après la connexion et permission qui la protège :
+     * le tableau de bord de ce profil.
+     *
+     * @return array{string, string|null}
+     */
+    public function home(): array
+    {
+        return match ($this) {
+            self::Administrateur => ['/administration/users', 'administration.view'],
+            self::DirectionGenerale, self::DirectionTechnique => ['/dashboard', null],
+            self::ServiceAchatsBtp => ['/achats/a-valider', 'achats.view'],
+            self::ConducteurTravaux, self::ChefChantier => ['/chantiers', 'chantiers.view'],
+            self::Magasinier => ['/achats/receptions', 'achats.view'],
+            self::Comptabilite => ['/achats/factures', 'achats.view'],
+            self::Finance => ['/ecrans/situation-caisse', 'finance.view'],
+            self::RessourcesHumaines => ['/rh', 'rh.view'],
+        };
+    }
+
     /** Profils pour lesquels la double authentification est obligatoire. */
     public function requiresTwoFactor(): bool
     {

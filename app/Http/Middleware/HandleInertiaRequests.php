@@ -4,6 +4,8 @@ namespace App\Http\Middleware;
 
 use App\Domain\Shared\Enums\RoleName;
 use App\Domain\Shared\Support\ModuleNavigation;
+use App\Domain\Shared\Support\Present;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -43,6 +45,8 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'roles' => $request->user()?->getRoleNames()->values() ?? [],
+                // Poste affiché dans l'en-tête : titre et service du compte connecté.
+                'poste' => self::poste($request->user()),
                 'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
             ],
             'navigation' => ModuleNavigation::for($request->user()),
@@ -57,6 +61,24 @@ class HandleInertiaRequests extends Middleware
                 ),
             ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+        ];
+    }
+
+    /**
+     * @return array{title: string, service: string}|null
+     */
+    private static function poste(?User $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $name = $user->getRoleNames()->first();
+        $role = is_string($name) ? RoleName::tryFrom($name) : null;
+
+        return [
+            'title' => $user->job_title ?? $role?->defaultJobTitle() ?? 'Collaborateur',
+            'service' => Present::text($user, 'service.name', '—'),
         ];
     }
 }

@@ -43,6 +43,9 @@ class DemoUsersSeeder extends Seeder
                 $user->save();
             }
 
+            // Poste cohérent avec le rôle ; mis à jour aussi pour un compte déjà existant.
+            $user->forceFill(['job_title' => $role->defaultJobTitle()])->save();
+
             $user->syncRoles([$role->value]);
         }
     }

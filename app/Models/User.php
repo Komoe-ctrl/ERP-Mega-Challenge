@@ -55,7 +55,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property CarbonInterface|null $updated_at
  * @property CarbonInterface|null $deleted_at
  */
-#[Fillable(['name', 'email', 'password', 'agency_id', 'service_id', 'phone', 'is_active'])]
+#[Fillable(['name', 'email', 'password', 'agency_id', 'service_id', 'job_title', 'phone', 'is_active'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 #[UsePolicy(UserPolicy::class)]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser

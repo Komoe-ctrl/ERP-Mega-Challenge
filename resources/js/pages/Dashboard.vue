@@ -22,7 +22,6 @@ import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { useLegacySession } from '@/composables/useLegacySession';
 import { usePermissions } from '@/composables/usePermissions';
-import { toast } from 'vue-sonner';
 import { dateFr, fcfa, fcfaShort, number, percent } from '@/lib/format';
 import { dashboard } from '@/routes';
 import { invoices, orders, stockItems } from '@/mocks/v2';
@@ -113,12 +112,8 @@ defineOptions({
 
 const page = usePage();
 const { can } = usePermissions();
-const { hasArrivedToday, clockIn, poste } = useLegacySession();
+const { hasArrivedToday, clockIn: pointer, poste } = useLegacySession();
 
-function pointer() {
-    clockIn();
-    toast.success('Arrivée enregistrée.');
-}
 const user = computed(() => page.props.auth.user);
 
 // Achats : commandes, factures et stocks seront branchés avec la V2 (maquettes en attendant).

@@ -20,7 +20,7 @@ import { fichierGroups, href, topMenu } from '@/lib/legacyMenu';
  * Bandeau unique de l'application : poste · service · menu du haut · exercice ·
  * pointage · cloche. Il reste fixe au défilement.
  */
-const { session, poste } = useLegacySession();
+const { session, poste, postes, arrivedAt, choosePoste } = useLegacySession();
 const { see } = usePermissions();
 const page = usePage();
 
@@ -43,7 +43,7 @@ const fichierActive = computed(() =>
 
 // « Arrivée pointée à 08 h 02 »
 const arrival = computed(() => {
-    const at = session.value.arrivedAt;
+    const at = arrivedAt.value;
 
     return at ? `${at.slice(11, 13)} h ${at.slice(14, 16)}` : null;
 });
@@ -65,7 +65,23 @@ function quit() {
     >
         <SidebarTrigger class="mr-1" />
         <div class="mr-3 flex items-center gap-2 text-sm">
-            <span class="font-medium" data-test="header-title">{{
+            <select
+                v-if="postes.length > 1"
+                :value="poste.id"
+                class="rounded-md border bg-background px-2 py-1 font-medium"
+                aria-label="Poste actif"
+                data-test="poste-select"
+                @change="
+                    choosePoste(
+                        Number(($event.target as HTMLSelectElement).value),
+                    )
+                "
+            >
+                <option v-for="p in postes" :key="p.id ?? 0" :value="p.id">
+                    {{ p.title }}
+                </option>
+            </select>
+            <span v-else class="font-medium" data-test="header-title">{{
                 poste.title
             }}</span>
             <span class="text-muted-foreground">·</span>

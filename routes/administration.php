@@ -7,6 +7,7 @@ use App\Http\Controllers\Administration\OrganizationController;
 use App\Http\Controllers\Administration\RoleController;
 use App\Http\Controllers\Administration\SettingController;
 use App\Http\Controllers\Administration\UserController;
+use App\Http\Controllers\Administration\ValidationStepController;
 use Illuminate\Support\Facades\Route;
 
 // CA1 : sans le droit `administration.view`, le serveur refuse la requête
@@ -43,4 +44,7 @@ Route::middleware(['auth', 'verified', 'can:administration.view'])
 
         // Journal des activités, en lecture seule (RG1.5).
         Route::get('journal', [ActivityController::class, 'index'])->name('journal');
+
+        Route::get('etapes-de-validation', [ValidationStepController::class, 'index'])->name('validation-steps');
+        Route::put('etapes-de-validation', [ValidationStepController::class, 'update'])->name('validation-steps.update');
     });

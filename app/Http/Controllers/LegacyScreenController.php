@@ -45,8 +45,6 @@ final class LegacyScreenController extends Controller
         'export-recettes-saari' => 'finance.view',
         'export-charges-saari' => 'finance.view',
         'justifier-piece-caisse' => 'finance.view',
-        // Administration
-        'etapes-de-validation' => 'administration.view',
         // Menu Fichier : budget
         'exercice-budgetaire' => 'budget.view',
         'elaboration-budgetaire' => 'budget.view',

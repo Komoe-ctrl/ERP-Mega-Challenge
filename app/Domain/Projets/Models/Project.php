@@ -7,6 +7,7 @@ namespace App\Domain\Projets\Models;
 use App\Domain\Administration\Models\Agency;
 use App\Domain\Chantiers\Models\Chantier;
 use App\Domain\Clients\Models\Client;
+use App\Domain\Pieces\Models\ProjectLot;
 use App\Domain\Projets\Policies\ProjectPolicy;
 use App\Domain\Projets\States\ProjectState;
 use App\Models\User;
@@ -103,5 +104,11 @@ class Project extends Model implements HasMedia
     public function chantiers(): HasMany
     {
         return $this->hasMany(Chantier::class);
+    }
+
+    /** @return HasMany<ProjectLot, $this> Produits / lots / sections (imputation analytique des pièces). */
+    public function lots(): HasMany
+    {
+        return $this->hasMany(ProjectLot::class);
     }
 }

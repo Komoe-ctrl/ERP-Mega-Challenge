@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             SettingsSeeder::class,
             OrganizationSeeder::class,
             FiscalYearSeeder::class,
+            PiecesSeeder::class,
             AdminUserSeeder::class,
         ]);
 
@@ -30,6 +31,7 @@ class DatabaseSeeder extends Seeder
             $this->call(BudgetSeeder::class);
             $this->call(PurchaseRequestsSeeder::class);
             $this->call(SuppliersSeeder::class);
+            $this->call(PiecesSeeder::class);
         }
     }
 }

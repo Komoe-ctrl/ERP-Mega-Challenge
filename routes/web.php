@@ -111,3 +111,4 @@ require __DIR__.'/chantiers.php';
 require __DIR__.'/achats.php';
 require __DIR__.'/budget.php';
 require __DIR__.'/fournisseurs.php';
+require __DIR__.'/pieces.php';

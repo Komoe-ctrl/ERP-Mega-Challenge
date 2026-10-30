@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import SchemaForm from '@/components/erp/SchemaForm.vue';
+import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { dateFr, fcfa } from '@/lib/format';
+import { achatsNav } from '@/lib/navs';
 import { articles, categories, units } from '@/mocks/achats';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 const props = defineProps<{ id?: number }>();
 
@@ -22,6 +24,7 @@ defineOptions({
 });
 
 const page = usePage();
+// RG8.13 : seul le Service Achats BTP crée, modifie ou désactive un article.
 const readonly = computed(
     () => !page.props.auth.roles.includes('service_achats_btp'),
 );
@@ -29,33 +32,83 @@ const article = computed(() => articles.find((a) => a.id === props.id));
 const title = computed(() =>
     article.value ? article.value.label : 'Nouvel article',
 );
-
-const form = reactive({
-    reference: article.value?.reference ?? '',
-    label: article.value?.label ?? '',
-    category: article.value?.category ?? categories[0],
-    unit: article.value?.unit ?? units[0],
-    price: article.value?.price ?? 0,
-});
-
 const disableOpen = ref(false);
 
-function onDisable() {
-    toast.success('Article désactivé (maquette).');
-    router.visit('/achats/referentiel');
-}
+const fields: FieldDef[] = [
+    {
+        name: 'reference',
+        label: 'Référence',
+        required: true,
+        pattern: /^[A-Z]{3}-\d{3}$/,
+        patternMessage:
+            'Format attendu : trois lettres, un tiret, trois chiffres (ex. CIM-003).',
+        validate: (value) =>
+            articles.some(
+                (a) => a.reference === value && a.id !== article.value?.id,
+            )
+                ? 'Cette référence existe déjà.'
+                : null,
+    },
+    { name: 'label', label: 'Libellé', required: true, minLength: 3 },
+    {
+        name: 'category',
+        label: 'Catégorie',
+        type: 'select',
+        required: true,
+        options: categories.map((c) => ({ value: c, label: c })),
+    },
+    {
+        name: 'unit',
+        label: 'Unité',
+        type: 'select',
+        required: true,
+        options: units.map((u) => ({ value: u, label: u })),
+    },
+    {
+        name: 'price',
+        label: 'Prix unitaire',
+        type: 'number',
+        required: true,
+        min: 1,
+        step: 1,
+        unit: 'FCFA',
+        hint: 'Tout changement de prix est historisé avec son auteur.',
+    },
+    {
+        name: 'reason',
+        label: 'Motif du changement de prix',
+        type: 'textarea',
+        validate: (value, values) =>
+            article.value &&
+            Number(values.price) !== article.value.price &&
+            !String(value ?? '').trim()
+                ? 'Indiquez le motif du changement de prix.'
+                : null,
+    },
+];
 
-function submit() {
+const initial: FieldValues = {
+    reference: article.value?.reference ?? '',
+    label: article.value?.label ?? '',
+    category: article.value?.category ?? '',
+    unit: article.value?.unit ?? '',
+    price: article.value?.price ?? null,
+    reason: '',
+};
+
+function submit(values: FieldValues) {
     toast.success(
-        article.value && form.price !== article.value.price
+        article.value && Number(values.price) !== article.value.price
             ? 'Article enregistré : le changement de prix est historisé (maquette).'
             : 'Article enregistré (maquette).',
     );
     router.visit('/achats/referentiel');
 }
 
-const select =
-    'h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-60';
+function onDisable() {
+    toast.success('Article désactivé (maquette).');
+    router.visit('/achats/referentiel');
+}
 </script>
 
 <template>
@@ -70,52 +123,9 @@ const select =
                     : 'Un article porte une référence, une unité et un prix unitaire en FCFA.'
             "
         />
+        <SubNav :links="achatsNav" />
 
-        <form
-            class="space-y-4 rounded-xl border bg-card p-4 shadow-xs sm:p-6"
-            @submit.prevent="submit"
-        >
-            <fieldset :disabled="readonly" class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2">
-                    <Label for="reference">Référence</Label>
-                    <Input id="reference" v-model="form.reference" required />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="label">Libellé</Label>
-                    <Input id="label" v-model="form.label" required />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="category">Catégorie</Label>
-                    <select
-                        id="category"
-                        v-model="form.category"
-                        :class="select"
-                    >
-                        <option v-for="c in categories" :key="c">
-                            {{ c }}
-                        </option>
-                    </select>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="unit">Unité</Label>
-                    <select id="unit" v-model="form.unit" :class="select">
-                        <option v-for="u in units" :key="u">{{ u }}</option>
-                    </select>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="price">Prix unitaire (FCFA)</Label>
-                    <Input
-                        id="price"
-                        v-model.number="form.price"
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputmode="numeric"
-                        required
-                    />
-                </div>
-            </fieldset>
-
+        <div class="space-y-4 rounded-xl border bg-card p-4 shadow-xs sm:p-6">
             <p
                 v-if="readonly"
                 class="rounded-lg bg-muted p-3 text-sm text-muted-foreground"
@@ -123,27 +133,32 @@ const select =
                 Consultation seule : seul le Service Achats BTP peut modifier un
                 article ou un prix.
             </p>
-
-            <div class="flex flex-wrap gap-2">
-                <Button v-if="!readonly" type="submit">Enregistrer</Button>
-                <Button
-                    v-if="!readonly && article?.active"
-                    type="button"
-                    variant="outline"
-                    class="text-destructive"
-                    @click="disableOpen = true"
-                >
-                    Désactiver
-                </Button>
-                <Button variant="ghost" as-child
-                    ><Link href="/achats/referentiel">Retour</Link></Button
-                >
-            </div>
+            <SchemaForm
+                v-if="!readonly"
+                :fields="fields"
+                :initial="initial"
+                @submit="submit"
+                @cancel="router.visit('/achats/referentiel')"
+            >
+                <template #actions>
+                    <Button
+                        v-if="article?.active"
+                        type="button"
+                        variant="outline"
+                        class="text-destructive"
+                        @click="disableOpen = true"
+                        >Désactiver</Button
+                    >
+                </template>
+            </SchemaForm>
+            <Button v-else variant="ghost" as-child
+                ><Link href="/achats/referentiel">Retour</Link></Button
+            >
             <p v-if="article" class="text-xs text-muted-foreground">
                 Un article déjà utilisé ne peut être que désactivé, jamais
                 supprimé (RG8.14).
             </p>
-        </form>
+        </div>
 
         <section v-if="article" class="rounded-xl border bg-card p-4 shadow-xs">
             <h2 class="mb-3 font-display font-semibold">Historique des prix</h2>

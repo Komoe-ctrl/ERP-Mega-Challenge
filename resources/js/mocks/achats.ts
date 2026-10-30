@@ -492,3 +492,48 @@ export function budgetLevel(consumption: number): BudgetLevel {
 
 export const budgetOf = (chantierId: number): BudgetLine[] =>
     budgetLines.filter((l) => l.chantierId === chantierId);
+
+/** Dépenses diverses d'un chantier (petits achats, transport) : justificatif obligatoire (RG10.4). */
+export type BudgetExpense = {
+    id: number;
+    chantierId: number;
+    date: string;
+    label: string;
+    post: string;
+    amount: number;
+    receipt: string;
+    author: string;
+};
+
+export const budgetExpenses: BudgetExpense[] = [
+    {
+        id: 1,
+        chantierId: 1,
+        date: '2026-10-28',
+        label: 'Location d’une bétonnière (2 jours)',
+        post: 'Engins et matériel',
+        amount: 90_000,
+        receipt: 'facture-location-0412.pdf',
+        author: 'Séraphin Konan',
+    },
+    {
+        id: 2,
+        chantierId: 1,
+        date: '2026-10-26',
+        label: 'Transport de sable',
+        post: 'Gros œuvre',
+        amount: 150_000,
+        receipt: 'recu-transport-t-0089.jpg',
+        author: 'Séraphin Konan',
+    },
+    {
+        id: 3,
+        chantierId: 2,
+        date: '2026-10-27',
+        label: 'Outillage (disques, gants)',
+        post: 'Second œuvre',
+        amount: 64_500,
+        receipt: 'ticket-4471.jpg',
+        author: 'Lanciné Touré',
+    },
+];

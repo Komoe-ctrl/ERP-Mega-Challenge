@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { Camera, ClipboardList, PenLine } from '@lucide/vue';
+import {
+    Camera,
+    ClipboardList,
+    FileSpreadsheet,
+    Pencil,
+    PenLine,
+    Plus,
+    UserPlus,
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import GanttChart from '@/components/erp/GanttChart.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -26,6 +35,10 @@ import {
     requests,
 } from '@/mocks/achats';
 import { chantiers, dailyReports, tasksOf } from '@/mocks/chantiers';
+import { orders } from '@/mocks/v2';
+import { toast } from 'vue-sonner';
+import type { Task } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 const props = defineProps<{ id: number }>();
 
@@ -37,11 +50,103 @@ const { can } = usePermissions();
 const chantier = computed(
     () => chantiers.find((c) => c.id === props.id) ?? chantiers[0],
 );
-const tasks = computed(() => tasksOf(chantier.value.id));
+// Tâches ajoutées pendant la session (maquette) en plus des tâches du planning.
+const extraTasks = ref<Task[]>([]);
+const extraTeam = ref<{ name: string; role: string }[]>([]);
+const tasks = computed(() => [
+    ...tasksOf(chantier.value.id),
+    ...extraTasks.value.filter((t) => t.chantierId === chantier.value.id),
+]);
+const readOnly = computed(() => chantier.value.status === 'cloture');
+const taskOpen = ref(false);
+const importOpen = ref(false);
+const memberOpen = ref(false);
+
+const taskFields: FieldDef[] = [
+    { name: 'name', label: 'Tâche', required: true, minLength: 3, wide: true },
+    { name: 'start', label: 'Début', type: 'date', required: true },
+    {
+        name: 'end',
+        label: 'Fin prévue',
+        type: 'date',
+        required: true,
+        validate: (value, values) =>
+            values.start && value && String(value) < String(values.start)
+                ? 'La fin doit être postérieure au début.'
+                : null,
+    },
+    {
+        name: 'weight',
+        label: 'Pondération',
+        type: 'number',
+        required: true,
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: 'Poids de la tâche dans l’avancement global (RG7.8).',
+    },
+    { name: 'milestone', label: 'Jalon (sans durée)', type: 'checkbox' },
+];
+const importFields: FieldDef[] = [
+    {
+        name: 'file',
+        label: 'Fichier Excel (.xlsx)',
+        type: 'file',
+        required: true,
+        hint: 'Colonnes attendues : Tâche, Début, Fin prévue, Pondération. 20 Mo maximum.',
+        wide: true,
+    },
+];
+const memberFields: FieldDef[] = [
+    { name: 'name', label: 'Nom', required: true, minLength: 3 },
+    {
+        name: 'role',
+        label: 'Rôle',
+        type: 'select',
+        required: true,
+        options: [
+            'Chef d’équipe',
+            'Topographe',
+            'Magasinier de chantier',
+            'Technicien',
+        ].map((r) => ({ value: r, label: r })),
+    },
+];
+
+function addTask(v: FieldValues) {
+    extraTasks.value.push({
+        id: Date.now(),
+        chantierId: chantier.value.id,
+        name: String(v.name),
+        start: String(v.start),
+        end: String(v.milestone ? v.start : v.end),
+        progress: 0,
+        weight: Number(v.weight),
+        milestone: Boolean(v.milestone),
+        lastUpdate: '2026-10-29',
+    });
+    toast.success('Tâche ajoutée au planning (maquette).');
+}
+function importPlanning(v: FieldValues) {
+    toast.success(
+        `Planning importé depuis « ${String(v.file)} » : 6 tâches créées (maquette).`,
+    );
+}
+function addMember(v: FieldValues) {
+    extraTeam.value.push({ name: String(v.name), role: String(v.role) });
+    toast.success('Membre affecté au chantier (maquette).');
+}
 const lines = computed(() => budgetOf(chantier.value.id));
 const totals = computed(() => budgetTotals(lines.value));
 const chantierRequests = computed(() =>
     requests.filter((r) => r.chantierId === chantier.value.id),
+);
+const chantierOrders = computed(() =>
+    orders.filter((o) =>
+        o.requestNumbers.some((n) =>
+            chantierRequests.value.some((r) => r.number === n),
+        ),
+    ),
 );
 const reports = computed(() =>
     dailyReports.filter((r) => r.chantierId === chantier.value.id),
@@ -60,7 +165,7 @@ const tabs = computed(() => [
     { key: 'avancement', label: 'Avancement' },
     {
         key: 'demandes',
-        label: 'Demandes',
+        label: 'Demandes et commandes',
         count: chantierRequests.value.length,
     },
     { key: 'budget', label: 'Budget' },
@@ -78,6 +183,15 @@ const tabs = computed(() => [
             :description="`${chantier.code} · ${chantier.projectName} · ${chantier.location}`"
         >
             <StatusBadge kind="site" :status="chantier.status" />
+            <Button
+                v-if="can('chantiers.update') && !readOnly"
+                variant="outline"
+                as-child
+            >
+                <Link :href="`/chantiers/${chantier.id}/modifier`"
+                    ><Pencil /> Modifier</Link
+                >
+            </Button>
             <Button v-if="can('chantiers.update')" variant="outline" as-child>
                 <Link :href="`/chantiers/${chantier.id}/avancement`"
                     ><PenLine /> Saisir l’avancement</Link
@@ -156,7 +270,16 @@ const tabs = computed(() => [
                 </section>
 
                 <section class="rounded-xl border bg-card p-4 shadow-xs">
-                    <h2 class="mb-3 font-display font-semibold">Équipe</h2>
+                    <div class="mb-3 flex items-center justify-between gap-2">
+                        <h2 class="font-display font-semibold">Équipe</h2>
+                        <Button
+                            v-if="can('chantiers.update') && !readOnly"
+                            size="sm"
+                            variant="outline"
+                            @click="memberOpen = true"
+                            ><UserPlus /> Affecter</Button
+                        >
+                    </div>
                     <ul class="divide-y text-sm">
                         <li class="flex justify-between py-2">
                             <span class="font-medium">{{
@@ -167,7 +290,7 @@ const tabs = computed(() => [
                             >
                         </li>
                         <li
-                            v-for="m in chantier.team"
+                            v-for="m in [...chantier.team, ...extraTeam]"
                             :key="m.name"
                             class="flex justify-between py-2"
                         >
@@ -210,6 +333,17 @@ const tabs = computed(() => [
 
         <!-- Planning : Gantt maison + tableau -->
         <div v-else-if="tab === 'planning'" class="space-y-4">
+            <div
+                v-if="can('chantiers.update') && !readOnly"
+                class="flex flex-wrap gap-2"
+            >
+                <Button variant="outline" @click="taskOpen = true"
+                    ><Plus /> Ajouter une tâche</Button
+                >
+                <Button variant="outline" @click="importOpen = true"
+                    ><FileSpreadsheet /> Importer depuis Excel</Button
+                >
+            </div>
             <GanttChart v-if="tasks.length" :tasks="tasks" />
             <EmptyState
                 v-else
@@ -273,6 +407,31 @@ const tabs = computed(() => [
                 v-if="!chantierRequests.length"
                 title="Aucune demande d’achat"
             />
+            <h3
+                v-if="chantierOrders.length"
+                class="pt-2 font-display font-semibold"
+            >
+                Bons de commande liés
+            </h3>
+            <Link
+                v-for="o in chantierOrders"
+                :key="o.id"
+                :href="`/achats/commandes/${o.id}`"
+                class="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-4 shadow-xs hover:bg-accent"
+            >
+                <span>
+                    <span class="font-medium">{{ o.number }}</span>
+                    <span class="block text-xs text-muted-foreground"
+                        >{{ o.supplierName }} · {{ dateFr(o.date) }}</span
+                    >
+                </span>
+                <span class="flex items-center gap-3">
+                    <span class="text-sm tabular-nums">{{
+                        fcfa(o.amount)
+                    }}</span>
+                    <StatusBadge kind="order" :status="o.status" />
+                </span>
+            </Link>
         </div>
 
         <!-- Budget -->
@@ -353,5 +512,25 @@ const tabs = computed(() => [
                 title="Aucun rapport journalier"
             />
         </div>
+        <FormDialog
+            v-model:open="taskOpen"
+            title="Ajouter une tâche"
+            :fields="taskFields"
+            @submit="addTask"
+        />
+        <FormDialog
+            v-model:open="importOpen"
+            title="Importer le planning depuis Excel"
+            description="RG7.3 : le planning peut être saisi dans l’application ou importé."
+            :fields="importFields"
+            submit-label="Importer"
+            @submit="importPlanning"
+        />
+        <FormDialog
+            v-model:open="memberOpen"
+            title="Affecter un membre"
+            :fields="memberFields"
+            @submit="addMember"
+        />
     </div>
 </template>

@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import EmptyState from '@/components/erp/EmptyState.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { computeSituation, contractTotals } from '@/lib/billing';
-import { dateFr, fcfa } from '@/lib/format';
-import { contracts, situations } from '@/mocks/v3';
+import { dateFr, fcfa, TODAY } from '@/lib/format';
+import { projects } from '@/mocks/chantiers';
+import { contracts, quotes, situations } from '@/mocks/v3';
+import type { Contract } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 const props = defineProps<{ id: number }>();
 
@@ -19,14 +23,76 @@ defineOptions({
 });
 
 const { can } = usePermissions();
-const contract = computed(
-    () => contracts.find((c) => c.id === props.id) ?? contracts[0],
+const contract = reactive<Contract>(
+    structuredClone(contracts.find((c) => c.id === props.id) ?? contracts[0]),
 );
-// CA6 : montant initial, avenants, montant actualisé et délai contractuel.
-const totals = computed(() => contractTotals(contract.value));
+const amendmentOpen = ref(false);
+// CA6 : montant initial, avenants, montant actualisé et délai contractuel (recalculés en direct).
+const totals = computed(() => contractTotals(contract));
 const contractSituations = computed(() =>
-    situations.filter((s) => s.contractNumber === contract.value.number),
+    situations.filter((s) => s.contractNumber === contract.number),
 );
+const project = computed(() =>
+    projects.find((p) =>
+        contract.projectName.startsWith(p.name.split(' — ')[0]),
+    ),
+);
+const quote = computed(() =>
+    quotes.find((q) =>
+        contract.projectName.startsWith(q.projectName.split(' — ')[0]),
+    ),
+);
+
+const fields: FieldDef[] = [
+    {
+        name: 'label',
+        label: 'Objet de l’avenant',
+        required: true,
+        minLength: 5,
+        wide: true,
+    },
+    {
+        name: 'amount',
+        label: 'Montant',
+        type: 'number',
+        required: true,
+        step: 1,
+        unit: 'FCFA',
+        hint: 'Positif (plus-value) ou négatif (moins-value).',
+        validate: (v) =>
+            Number(v) === 0
+                ? 'Le montant ne peut pas être nul ; saisissez 0 jour si seul le délai change.'
+                : null,
+    },
+    {
+        name: 'days',
+        label: 'Délai supplémentaire',
+        type: 'number',
+        required: true,
+        step: 1,
+        unit: 'jours',
+    },
+    { name: 'date', label: 'Date', type: 'date', required: true },
+];
+
+function addAmendment(v: FieldValues) {
+    contract.amendments.push({
+        number: `AV-0${contract.amendments.length + 1}`,
+        date: String(v.date),
+        label: String(v.label),
+        amount: Number(v.amount),
+        days: Number(v.days),
+        validated: false,
+    });
+    toast.success('Avenant enregistré, en attente de validation (maquette).');
+}
+
+function validateAmendment(index: number) {
+    contract.amendments[index].validated = true;
+    toast.success(
+        'Avenant validé : le montant actualisé et le délai sont mis à jour.',
+    );
+}
 </script>
 
 <template>
@@ -36,7 +102,18 @@ const contractSituations = computed(() =>
         <PageHeader
             :title="contract.number"
             :description="`${contract.clientName} · ${contract.projectName} · signé le ${dateFr(contract.signedAt)}`"
-        />
+        >
+            <Button v-if="project" variant="outline" as-child
+                ><Link :href="`/projets/${project.id}`"
+                    >Voir le projet</Link
+                ></Button
+            >
+            <Button v-if="quote" variant="outline" as-child
+                ><Link :href="`/devis/${quote.id}`"
+                    >Voir le devis {{ quote.number }}</Link
+                ></Button
+            >
+        </PageHeader>
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
@@ -45,7 +122,7 @@ const contractSituations = computed(() =>
             />
             <KpiCard
                 label="Avenants validés"
-                :value="`+${fcfa(totals.amendmentsAmount)}`"
+                :value="`${totals.amendmentsAmount >= 0 ? '+' : ''}${fcfa(totals.amendmentsAmount)}`"
                 tone="info"
             />
             <KpiCard
@@ -85,13 +162,13 @@ const contractSituations = computed(() =>
                         v-if="can('marches.create')"
                         size="sm"
                         variant="outline"
-                        @click="toast.success('Nouvel avenant (maquette).')"
+                        @click="amendmentOpen = true"
                         >Ajouter</Button
                     >
                 </div>
                 <ul v-if="contract.amendments.length" class="divide-y text-sm">
                     <li
-                        v-for="a in contract.amendments"
+                        v-for="(a, i) in contract.amendments"
                         :key="a.number"
                         class="flex flex-wrap items-start justify-between gap-2 py-2.5"
                     >
@@ -105,10 +182,18 @@ const contractSituations = computed(() =>
                                 {{ a.days }} jours</span
                             >
                         </span>
-                        <StatusBadge
-                            :label="a.validated ? 'Validé' : 'En attente'"
-                            :tone="a.validated ? 'success' : 'warning'"
-                        />
+                        <span class="flex items-center gap-2">
+                            <StatusBadge
+                                :label="a.validated ? 'Validé' : 'En attente'"
+                                :tone="a.validated ? 'success' : 'warning'"
+                            />
+                            <Button
+                                v-if="!a.validated && can('marches.validate')"
+                                size="sm"
+                                @click="validateAmendment(i)"
+                                >Valider</Button
+                            >
+                        </span>
                     </li>
                 </ul>
                 <EmptyState v-else compact title="Aucun avenant" />
@@ -140,5 +225,13 @@ const contractSituations = computed(() =>
             </ul>
             <EmptyState v-else compact title="Aucune situation" />
         </section>
+
+        <FormDialog
+            v-model:open="amendmentOpen"
+            title="Nouvel avenant"
+            :initial="{ date: TODAY, days: 0 }"
+            :fields="fields"
+            @submit="addAmendment"
+        />
     </div>
 </template>

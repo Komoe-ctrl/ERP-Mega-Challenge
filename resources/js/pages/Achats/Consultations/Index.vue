@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { Plus } from '@lucide/vue';
+import { computed, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SubNav from '@/components/erp/SubNav.vue';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn } from '@/lib/dataTable';
+import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { fcfa } from '@/lib/format';
 import { achatsNav } from '@/lib/navs';
+import { statuses } from '@/lib/status';
+import { requestTotal, requests } from '@/mocks/achats';
 import { consultations } from '@/mocks/v2';
 import type { Consultation } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 defineOptions({
     layout: {
@@ -18,6 +27,64 @@ defineOptions({
         ],
     },
 });
+
+const { can } = usePermissions();
+const rows = ref<Consultation[]>(consultations.map((c) => ({ ...c })));
+const createOpen = ref(false);
+
+// Une consultation porte sur une demande validée qui n'a pas encore de consultation.
+const consultable = computed(() =>
+    requests.filter(
+        (r) =>
+            r.status === 'validee' &&
+            !rows.value.some((c) => c.requestNumber === r.number),
+    ),
+);
+const fields = computed<FieldDef[]>(() => [
+    {
+        name: 'request',
+        label: 'Demande validée',
+        type: 'select',
+        required: true,
+        options: consultable.value.map((r) => ({
+            value: r.number,
+            label: `${r.number} — ${r.chantierName} (${fcfa(requestTotal(r))})`,
+        })),
+        wide: true,
+        hint: consultable.value.length
+            ? 'Au-delà du seuil paramétré, au moins 3 fournisseurs sont consultés (RG8.11).'
+            : 'Aucune demande validée à consulter.',
+    },
+    {
+        name: 'deadline',
+        label: 'Date limite de réponse',
+        type: 'date',
+        required: true,
+    },
+    { name: 'note', label: 'Précisions aux fournisseurs', type: 'textarea' },
+]);
+
+function create(v: FieldValues) {
+    const request = requests.find((r) => r.number === v.request);
+
+    if (!request) {
+        return;
+    }
+
+    rows.value.unshift({
+        id: Date.now(),
+        number: `CS-2026-00${33 + rows.value.length - consultations.length}`,
+        requestNumber: request.number,
+        chantierName: request.chantierName,
+        status: 'ouverte',
+        items: request.justification,
+        minSuppliers: 3,
+        quotes: [],
+    });
+    toast.success(
+        'Consultation ouverte : les fournisseurs de la catégorie concernée sont sollicités (maquette).',
+    );
+}
 
 const columns: DataTableColumn<Consultation>[] = [
     {
@@ -42,16 +109,35 @@ const columns: DataTableColumn<Consultation>[] = [
     {
         id: 'best',
         header: 'Meilleure offre',
-        accessorFn: (c) => Math.min(...c.quotes.map((q) => q.unitTotal)),
+        accessorFn: (c) =>
+            c.quotes.length ? Math.min(...c.quotes.map((q) => q.unitTotal)) : 0,
         cell: ({ row }) =>
             amountCell(
-                fcfa(Math.min(...row.original.quotes.map((q) => q.unitTotal))),
+                row.original.quotes.length
+                    ? fcfa(
+                          Math.min(
+                              ...row.original.quotes.map((q) => q.unitTotal),
+                          ),
+                      )
+                    : '—',
             ),
     },
     {
         accessorKey: 'status',
         header: 'Statut',
+        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('consultation', row.original.status),
+    },
+];
+
+const filters: DataTableFilter[] = [
+    {
+        columnId: 'status',
+        label: 'Statut',
+        options: Object.entries(statuses.consultation).map(([value, meta]) => ({
+            value,
+            label: meta.label,
+        })),
     },
 ];
 </script>
@@ -63,12 +149,24 @@ const columns: DataTableColumn<Consultation>[] = [
         <PageHeader
             title="Consultations de fournisseurs"
             description="Au-delà du seuil paramétré, au moins trois fournisseurs sont consultés avant commande (RG8.11)."
-        />
+        >
+            <Button v-if="can('achats.create')" @click="createOpen = true"
+                ><Plus /> Nouvelle consultation</Button
+            >
+        </PageHeader>
         <SubNav :links="achatsNav" />
         <DataTable
             :columns="columns"
-            :data="consultations"
-            :searchable="false"
+            :data="rows"
+            :filters="filters"
+            search-placeholder="Rechercher une consultation…"
+        />
+        <FormDialog
+            v-model:open="createOpen"
+            title="Nouvelle consultation"
+            :fields="fields"
+            submit-label="Ouvrir la consultation"
+            @submit="create"
         />
     </div>
 </template>

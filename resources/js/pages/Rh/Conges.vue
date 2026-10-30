@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { h, ref } from 'vue';
+import { Plus } from '@lucide/vue';
+import { computed, h, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { badgeCell } from '@/lib/cells';
 import type { DataTableColumn } from '@/lib/dataTable';
-import { dateFr } from '@/lib/format';
+import { dateFr, TODAY } from '@/lib/format';
 import { rhNav } from '@/lib/navs';
-import { leaves } from '@/mocks/v4';
+import { employees, leaves } from '@/mocks/v4';
 import type { Leave } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
 defineOptions({
     layout: {
@@ -25,13 +28,97 @@ defineOptions({
 });
 
 const { can } = usePermissions();
-const refuseOpen = ref(false);
+const rows = ref<Leave[]>(leaves.map((l) => ({ ...l })));
+const createOpen = ref(false);
+const refusing = ref<number | null>(null);
+const refuseOpen = computed({
+    get: () => refusing.value !== null,
+    set: (v) => {
+        if (!v) refusing.value = null;
+    },
+});
+
+const fields = computed<FieldDef[]>(() => [
+    {
+        name: 'employee',
+        label: 'Employé',
+        type: 'select',
+        required: true,
+        wide: true,
+        options: employees.map((e) => ({ value: e.name, label: e.name })),
+    },
+    {
+        name: 'type',
+        label: 'Type de congé',
+        type: 'select',
+        required: true,
+        options: ['Congé annuel', 'Congé maladie', 'Congé exceptionnel'].map(
+            (t) => ({ value: t, label: t }),
+        ),
+    },
+    {
+        name: 'from',
+        label: 'Du',
+        type: 'date',
+        required: true,
+        validate: (v) =>
+            v && String(v) < TODAY
+                ? 'La date de début ne peut pas être dans le passé.'
+                : null,
+    },
+    {
+        name: 'to',
+        label: 'Au',
+        type: 'date',
+        required: true,
+        validate: (v, values) => {
+            if (values.from && v && String(v) < String(values.from)) {
+                return 'La fin doit être postérieure au début.';
+            }
+
+            const clash = rows.value.find(
+                (l) =>
+                    l.employee === values.employee &&
+                    l.status !== 'refusee' &&
+                    String(values.from) <= l.to &&
+                    String(v) >= l.from,
+            );
+
+            return clash
+                ? `Chevauchement avec un congé du ${dateFr(clash.from)} au ${dateFr(clash.to)}.`
+                : null;
+        },
+    },
+]);
+
+function create(v: FieldValues) {
+    rows.value.unshift({
+        id: Date.now(),
+        employee: String(v.employee),
+        type: String(v.type),
+        from: String(v.from),
+        to: String(v.to),
+        status: 'demandee',
+    });
+    toast.success(
+        'Demande de congé enregistrée : elle suit le circuit de validation (maquette).',
+    );
+}
 
 function approve(l: Leave) {
-    toast.success(`Congé de ${l.employee} validé (maquette).`);
+    l.status = 'validee';
+    toast.success(
+        `Congé de ${l.employee} validé : l’employé ne pourra plus être pointé sur cette période.`,
+    );
 }
+
 function refuse(reason: string) {
-    toast.success(`Congé refusé : « ${reason} » (maquette).`);
+    const l = rows.value.find((x) => x.id === refusing.value);
+
+    if (l) {
+        l.status = 'refusee';
+        toast.success(`Congé refusé : « ${reason} ».`);
+    }
 }
 
 const columns: DataTableColumn<Leave>[] = [
@@ -68,7 +155,7 @@ const columns: DataTableColumn<Leave>[] = [
                           {
                               size: 'sm',
                               variant: 'outline',
-                              onClick: () => (refuseOpen.value = true),
+                              onClick: () => (refusing.value = row.original.id),
                           },
                           () => 'Refuser',
                       ),
@@ -85,9 +172,19 @@ const columns: DataTableColumn<Leave>[] = [
         <PageHeader
             title="Congés"
             description="Circuit de demande et de validation ; un employé en congé ne peut pas être pointé (RG13.2)."
-        />
+        >
+            <Button v-if="can('rh.create')" @click="createOpen = true"
+                ><Plus /> Demander un congé</Button
+            >
+        </PageHeader>
         <SubNav :links="rhNav" />
-        <DataTable :columns="columns" :data="leaves" :searchable="false" />
+        <DataTable :columns="columns" :data="rows" :searchable="false" />
+        <FormDialog
+            v-model:open="createOpen"
+            title="Demande de congé"
+            :fields="fields"
+            @submit="create"
+        />
         <ConfirmDialog
             v-model:open="refuseOpen"
             title="Refuser la demande de congé"

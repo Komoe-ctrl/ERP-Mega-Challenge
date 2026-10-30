@@ -18,6 +18,7 @@ import {
     DIRECTION_THRESHOLD,
 } from '@/mocks/achats';
 import { requests } from '@/mocks/achats';
+import { invoices, orders, receptions } from '@/mocks/v2';
 import type { PurchaseRequest, RequestStatus } from '@/types/erp';
 
 const props = defineProps<{ id: number }>();
@@ -36,6 +37,21 @@ const request = reactive<PurchaseRequest>(
 const adjusted = reactive<Record<number, number>>(
     Object.fromEntries(
         request.lines.map((l) => [l.id, l.adjustedQuantity ?? l.quantity]),
+    ),
+);
+
+// CA8.2 : depuis la demande, retrouver ses bons de commande, réceptions, factures et leur paiement.
+const linkedOrders = computed(() =>
+    orders.filter((o) => o.requestNumbers.includes(request.number)),
+);
+const linkedReceptions = computed(() =>
+    receptions.filter((r) =>
+        linkedOrders.value.some((o) => o.number === r.orderNumber),
+    ),
+);
+const linkedInvoices = computed(() =>
+    invoices.filter((i) =>
+        linkedOrders.value.some((o) => o.number === i.orderNumber),
     ),
 );
 
@@ -152,6 +168,11 @@ const titles = {
             />
             <Button variant="outline" as-child
                 ><Link href="/achats/demandes">Retour à la liste</Link></Button
+            >
+            <Button variant="outline" as-child
+                ><Link :href="`/chantiers/${request.chantierId}`"
+                    >Voir le chantier</Link
+                ></Button
             >
         </PageHeader>
 
@@ -316,6 +337,90 @@ const titles = {
             </section>
         </div>
 
+        <section
+            v-if="request.status === 'validee'"
+            class="rounded-xl border bg-card p-4 shadow-xs"
+        >
+            <h2 class="mb-3 font-display font-semibold">
+                Suite du parcours d’achat
+            </h2>
+            <div v-if="linkedOrders.length" class="grid gap-4 md:grid-cols-3">
+                <div>
+                    <h3 class="mb-1 text-xs font-medium text-muted-foreground">
+                        Bons de commande
+                    </h3>
+                    <ul class="space-y-1 text-sm">
+                        <li
+                            v-for="o in linkedOrders"
+                            :key="o.id"
+                            class="flex items-center justify-between gap-2"
+                        >
+                            <Link
+                                :href="`/achats/commandes/${o.id}`"
+                                class="hover:underline"
+                                >{{ o.number }}</Link
+                            >
+                            <StatusBadge kind="order" :status="o.status" />
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="mb-1 text-xs font-medium text-muted-foreground">
+                        Réceptions
+                    </h3>
+                    <ul class="space-y-1 text-sm">
+                        <li
+                            v-for="r in linkedReceptions"
+                            :key="r.id"
+                            class="flex items-center justify-between gap-2"
+                        >
+                            <Link
+                                href="/achats/receptions"
+                                class="hover:underline"
+                                >{{ r.number }}</Link
+                            >
+                            <StatusBadge kind="reception" :status="r.gap" />
+                        </li>
+                        <li
+                            v-if="!linkedReceptions.length"
+                            class="text-muted-foreground"
+                        >
+                            Aucune réception.
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="mb-1 text-xs font-medium text-muted-foreground">
+                        Factures et paiement
+                    </h3>
+                    <ul class="space-y-1 text-sm">
+                        <li
+                            v-for="i in linkedInvoices"
+                            :key="i.id"
+                            class="flex items-center justify-between gap-2"
+                        >
+                            <Link
+                                href="/achats/factures"
+                                class="hover:underline"
+                                >{{ i.number }}</Link
+                            >
+                            <StatusBadge kind="invoice" :status="i.status" />
+                        </li>
+                        <li
+                            v-if="!linkedInvoices.length"
+                            class="text-muted-foreground"
+                        >
+                            Aucune facture.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <p v-else class="text-sm text-muted-foreground">
+                Prise en charge par le Service Achats BTP en attente : aucun bon
+                de commande pour l’instant.
+            </p>
+        </section>
+
         <!-- Décision du valideur -->
         <div
             v-if="canDecide"
@@ -343,6 +448,18 @@ const titles = {
             Vous êtes l’auteur de cette demande : vous ne pouvez pas la valider
             vous-même (séparation des tâches).
         </p>
+        <div
+            v-if="
+                ['renvoyee', 'brouillon'].includes(request.status) &&
+                can('achats.create')
+            "
+        >
+            <Button as-child
+                ><Link :href="`/achats/demandes/${request.id}/modifier`"
+                    >Corriger et soumettre à nouveau</Link
+                ></Button
+            >
+        </div>
         <div v-if="canCancel && (isAuthor || !can('achats.validate'))">
             <Button
                 variant="ghost"

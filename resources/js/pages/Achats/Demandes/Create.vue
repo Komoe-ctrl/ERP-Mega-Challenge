@@ -17,9 +17,13 @@ import {
     budgetTotals,
     categories,
     DIRECTION_THRESHOLD,
+    requests,
 } from '@/mocks/achats';
 import { chantiers } from '@/mocks/chantiers';
 import type { Urgency } from '@/types/erp';
+
+/** `id` : correction d'une demande renvoyée (ou reprise d'un brouillon). */
+const props = defineProps<{ id?: number }>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Achats', href: '/achats/demandes' }] },
@@ -42,10 +46,28 @@ const newLine = (): FormLine => ({
     urgency: 'normale',
 });
 
-const chantierId = ref<number | null>(1);
-const justification = ref('');
-const lines = reactive<FormLine[]>([newLine()]);
+const existing = computed(() => requests.find((r) => r.id === props.id));
+const title = computed(() =>
+    existing.value
+        ? `Corriger ${existing.value.number}`
+        : 'Nouvelle demande d’achat',
+);
+
+const chantierId = ref<number | null>(existing.value?.chantierId ?? 1);
+const justification = ref(existing.value?.justification ?? '');
+const lines = reactive<FormLine[]>(
+    existing.value
+        ? existing.value.lines.map((l) => ({
+              key: nextKey++,
+              articleId: l.articleId,
+              quantity: l.quantity,
+              needDate: l.needDate,
+              urgency: l.urgency,
+          }))
+        : [newLine()],
+);
 const missingOpen = ref(false);
+const attempted = ref(false);
 
 // RG8.2 : le prix vient obligatoirement du référentiel, jamais saisi.
 const priceOf = (l: FormLine) =>
@@ -69,14 +91,36 @@ const needsDirection = computed(
     () => overBudget.value || total.value > DIRECTION_THRESHOLD,
 ); // RG8.7
 
+// Validation en français, affichée sous les champs après une tentative d'envoi.
+const lineErrors = (l: FormLine) => ({
+    article: l.articleId ? '' : 'Choisissez un article.',
+    quantity: l.quantity > 0 ? '' : 'La quantité doit être supérieure à 0.',
+    date:
+        l.needDate && l.needDate >= TODAY
+            ? ''
+            : 'La date de besoin ne peut pas être dans le passé.',
+});
+const justificationError = computed(() =>
+    justification.value.trim().length >= 5
+        ? ''
+        : 'La justification est obligatoire (5 caractères minimum).',
+);
 const valid = computed(
     () =>
         chantierId.value !== null &&
         lines.length > 0 &&
-        lines.every((l) => l.articleId && l.quantity > 0),
+        lines.every((l) => Object.values(lineErrors(l)).every((e) => !e)),
 );
 
 function save(submit: boolean) {
+    attempted.value = true;
+
+    if (!valid.value || (submit && justificationError.value)) {
+        toast.error('Corrigez les champs signalés avant d’enregistrer.');
+
+        return;
+    }
+
     toast.success(
         submit
             ? needsDirection.value
@@ -98,18 +142,24 @@ const field =
 </script>
 
 <template>
-    <Head title="Nouvelle demande d’achat" />
+    <Head :title="title" />
 
     <div class="mx-auto w-full max-w-3xl space-y-4 p-4 pb-40">
         <div>
-            <h1 class="font-display text-xl font-semibold">
-                Nouvelle demande d’achat
-            </h1>
+            <h1 class="font-display text-xl font-semibold">{{ title }}</h1>
             <p class="text-sm text-muted-foreground">
                 Les prix viennent du référentiel : vous ne saisissez que les
                 quantités.
             </p>
         </div>
+
+        <p
+            v-if="existing?.status === 'renvoyee'"
+            class="rounded-xl bg-brand-soft p-3 text-sm text-brand-strong"
+        >
+            Renvoyée pour correction : «
+            {{ existing.history[existing.history.length - 1]?.reason }} »
+        </p>
 
         <section class="space-y-3 rounded-2xl border bg-card p-4 shadow-xs">
             <div class="grid gap-2">
@@ -139,9 +189,8 @@ const field =
                     <span
                         class="font-display text-lg font-semibold tabular-nums"
                         :class="overBudget ? 'text-danger' : ''"
+                        >{{ fcfa(availableAfter) }}</span
                     >
-                        {{ fcfa(availableAfter) }}
-                    </span>
                 </div>
                 <p class="mb-2 text-xs text-muted-foreground">
                     Avant cette demande : {{ fcfa(totals.remaining) }}
@@ -174,9 +223,8 @@ const field =
                     size="icon"
                     aria-label="Supprimer la ligne"
                     @click="lines.splice(i, 1)"
-                >
-                    <Trash2 />
-                </Button>
+                    ><Trash2
+                /></Button>
             </div>
 
             <div class="grid gap-2">
@@ -185,6 +233,7 @@ const field =
                     :id="`article-${l.key}`"
                     v-model="l.articleId"
                     :class="field"
+                    :aria-invalid="attempted && !!lineErrors(l).article"
                 >
                     <option :value="null" disabled>Choisir un article…</option>
                     <optgroup v-for="cat in categories" :key="cat" :label="cat">
@@ -199,6 +248,13 @@ const field =
                         </option>
                     </optgroup>
                 </select>
+                <p
+                    v-if="attempted && lineErrors(l).article"
+                    class="text-sm text-destructive"
+                    role="alert"
+                >
+                    {{ lineErrors(l).article }}
+                </p>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
@@ -219,6 +275,13 @@ const field =
                         inputmode="decimal"
                         class="h-12 text-base"
                     />
+                    <p
+                        v-if="attempted && lineErrors(l).quantity"
+                        class="text-sm text-destructive"
+                        role="alert"
+                    >
+                        {{ lineErrors(l).quantity }}
+                    </p>
                 </div>
                 <div class="grid gap-2">
                     <Label>Prix unitaire (référentiel)</Label>
@@ -237,6 +300,13 @@ const field =
                         type="date"
                         class="h-12 text-base"
                     />
+                    <p
+                        v-if="attempted && lineErrors(l).date"
+                        class="text-sm text-destructive"
+                        role="alert"
+                    >
+                        {{ lineErrors(l).date }}
+                    </p>
                 </div>
                 <div class="grid gap-2">
                     <Label :for="`urg-${l.key}`">Urgence</Label>
@@ -273,7 +343,15 @@ const field =
                 rows="3"
                 class="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
                 placeholder="À quoi servent ces matériaux ?"
+                :aria-invalid="attempted && !!justificationError"
             />
+            <p
+                v-if="attempted && justificationError"
+                class="text-sm text-destructive"
+                role="alert"
+            >
+                {{ justificationError }}
+            </p>
         </section>
 
         <!-- Barre fixe : total, alertes, actions -->
@@ -306,24 +384,18 @@ const field =
                             {{ fcfa(total) }}
                         </p>
                     </div>
-                    <Button variant="outline" size="lg" as-child>
-                        <Link href="/achats/demandes">Annuler</Link>
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        size="lg"
-                        :disabled="!valid"
-                        @click="save(false)"
+                    <Button variant="outline" size="lg" as-child
+                        ><Link href="/achats/demandes">Annuler</Link></Button
+                    >
+                    <Button variant="secondary" size="lg" @click="save(false)"
                         >Brouillon</Button
                     >
                     <Button
                         size="lg"
                         class="bg-brand text-brand-foreground hover:bg-brand/90"
-                        :disabled="!valid"
                         @click="save(true)"
+                        >Soumettre</Button
                     >
-                        Soumettre
-                    </Button>
                 </div>
             </div>
         </div>

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { Plus } from '@lucide/vue';
+import { FileSpreadsheet, Plus } from '@lucide/vue';
+import { ref } from 'vue';
+import { toast } from 'vue-sonner';
+import FormDialog from '@/components/erp/FormDialog.vue';
+import type { FieldDef, FieldValues } from '@/types/forms';
 import { computed } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -28,6 +32,23 @@ const page = usePage();
 const isPurchasing = computed(() =>
     page.props.auth.roles.includes('service_achats_btp'),
 );
+
+const importOpen = ref(false);
+const importFields: FieldDef[] = [
+    {
+        name: 'file',
+        label: 'Fichier Excel ou CSV',
+        type: 'file',
+        required: true,
+        wide: true,
+        hint: 'Colonnes : référence, libellé, catégorie, unité, prix unitaire (FCFA). Chargement initial du référentiel (RG8.16).',
+    },
+];
+function importArticles(v: FieldValues) {
+    toast.success(
+        `Import de « ${String(v.file)} » : 26 articles créés, 0 rejeté (maquette).`,
+    );
+}
 
 const columns: DataTableColumn<Article>[] = [
     {
@@ -90,12 +111,19 @@ const filters: DataTableFilter[] = [
             title="Référentiel des prix"
             description="Prix de référence interne : le demandeur ne saisit jamais de prix."
         >
+            <Button
+                v-if="isPurchasing"
+                variant="outline"
+                @click="importOpen = true"
+                ><FileSpreadsheet /> Importer Excel / CSV</Button
+            >
             <Button v-if="isPurchasing" as-child>
                 <Link href="/achats/referentiel/creer"
-                    ><Plus /> <SubNav :links="achatsNav" /> Nouvel article</Link
+                    ><Plus /> Nouvel article</Link
                 >
             </Button>
         </PageHeader>
+        <SubNav :links="achatsNav" />
 
         <p
             v-if="!isPurchasing"
@@ -136,5 +164,13 @@ const filters: DataTableFilter[] = [
                 </li>
             </ul>
         </section>
+        <FormDialog
+            v-model:open="importOpen"
+            title="Importer le référentiel"
+            description="Chargement initial par fichier Excel ou CSV."
+            :fields="importFields"
+            submit-label="Importer"
+            @submit="importArticles"
+        />
     </div>
 </template>

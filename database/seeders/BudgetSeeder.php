@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domain\Budget\Models\BudgetExpense;
 use App\Domain\Budget\Models\BudgetLine;
+use App\Domain\Budget\Models\BudgetRevision;
 use App\Domain\Chantiers\Models\Chantier;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
@@ -36,6 +39,54 @@ class BudgetSeeder extends Seeder
                     'actual_amount' => $actual * $million,
                 ],
             );
+        }
+
+        $this->operations();
+    }
+
+    /** Révisions validées et dépenses diverses de démonstration (montants déjà inclus dans les postes). */
+    private function operations(): void
+    {
+        $chantiers = Chantier::query()->pluck('id', 'code');
+        $users = User::query()->pluck('id', 'name');
+
+        $revisions = [
+            ['CH-001', 'Gros œuvre', 8_000_000, 'Avenant n°1 du marché : ajout d\'un voile de contreventement.', 'Ibrahim Coulibaly', 'Kouadio Brou'],
+            ['CH-001', 'Main-d\'œuvre', 2_000_000, 'Heures supplémentaires pour rattraper le retard du plancher.', 'Ibrahim Coulibaly', 'Kouadio Brou'],
+        ];
+
+        foreach ($revisions as [$code, $post, $amount, $reason, $author, $decider]) {
+            $line = BudgetLine::query()->where('chantier_id', $chantiers[$code] ?? 0)->where('post', $post)->first();
+
+            if ($line === null || BudgetRevision::query()->where('budget_line_id', $line->id)->where('reason', $reason)->exists()) {
+                continue;
+            }
+
+            BudgetRevision::query()->create([
+                'chantier_id' => $line->chantier_id, 'budget_line_id' => $line->id, 'amount' => $amount, 'reason' => $reason,
+                'requested_by' => $users[$author] ?? null, 'status' => BudgetRevision::VALIDATED,
+                'decided_by' => $users[$decider] ?? null, 'decided_at' => '2026-09-30',
+            ]);
+        }
+
+        $expenses = [
+            ['CH-001', 'Engins et matériel', 'Location d\'une bétonnière (2 jours)', 90_000, '2026-10-28', 'facture-location-0412.pdf', 'Séraphin Konan'],
+            ['CH-001', 'Gros œuvre', 'Transport de sable', 150_000, '2026-10-26', 'recu-transport-t-0089.pdf', 'Séraphin Konan'],
+            ['CH-002', 'Second œuvre', 'Outillage (disques, gants)', 64_500, '2026-10-27', 'ticket-4471.pdf', 'Lanciné Touré'],
+        ];
+
+        foreach ($expenses as [$code, $post, $label, $amount, $date, $file, $author]) {
+            $line = BudgetLine::query()->where('chantier_id', $chantiers[$code] ?? 0)->where('post', $post)->first();
+
+            if ($line === null || BudgetExpense::query()->where('label', $label)->exists()) {
+                continue;
+            }
+
+            $expense = BudgetExpense::query()->create([
+                'chantier_id' => $line->chantier_id, 'budget_line_id' => $line->id, 'label' => $label,
+                'amount' => $amount, 'spent_on' => $date, 'user_id' => $users[$author] ?? null,
+            ]);
+            $expense->addMediaFromString('Justificatif de démonstration')->usingFileName($file)->toMediaCollection('receipts');
         }
     }
 

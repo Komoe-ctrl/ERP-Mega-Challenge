@@ -90,12 +90,6 @@ Route::middleware(['auth', 'verified', 'can:finance.view'])->prefix('finance')->
     Route::inertia('tresorerie', 'Finance/Tresorerie')->name('tresorerie');
 });
 
-// --- V1 : Budget chantier (M10) -------------------------------------------
-Route::middleware(['auth', 'verified', 'can:budget.view'])->prefix('budget')->name('budget.')->group(function () {
-    Route::inertia('/', 'Budget/Index')->name('index');
-    Route::get('{id}', fn (int $id) => Inertia::render('Budget/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
-
 /*
 |--------------------------------------------------------------------------
 | DÉMO LOCALE : changer de profil
@@ -120,3 +114,4 @@ require __DIR__.'/administration.php';
 require __DIR__.'/projets.php';
 require __DIR__.'/chantiers.php';
 require __DIR__.'/achats.php';
+require __DIR__.'/budget.php';

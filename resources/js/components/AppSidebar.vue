@@ -61,8 +61,8 @@ const mainNavItems = computed<NavItem[]>(() => [
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
             <LegacyAccordion />
+            <NavMain :items="mainNavItems" />
         </SidebarContent>
 
         <SidebarFooter>

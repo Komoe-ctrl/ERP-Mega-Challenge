@@ -41,7 +41,7 @@ function quit() {
             class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-sm"
             data-test="legacy-header"
         >
-            <AppLogoIcon class="size-6 shrink-0 fill-current text-brand" />
+            <AppLogoIcon class-name="h-8 shrink-0" />
             <label v-if="postes.length > 1" class="flex items-center gap-1.5">
                 <span class="text-muted-foreground">Poste</span>
                 <select

@@ -131,8 +131,7 @@ const nextStep = computed(() => {
     return defaultWorkflow[status === 'saisie' ? 1 : 2] ?? null;
 });
 const canAdvance = computed(
-    () =>
-        nextStep.value !== null && nextStep.value.title === poste.value.title,
+    () => nextStep.value !== null && nextStep.value.title === poste.value.title,
 );
 
 const statusTone: Record<

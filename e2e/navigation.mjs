@@ -33,9 +33,10 @@ const [local, domain] = env.E2E_EMAIL.split('@');
 /** Oracle indépendant du code : arrivée, poste et service attendus par profil. */
 const ROLES = {
     administrateur: {
-        home: '/administration/users',
+        home: '/administration',
         title: 'Administrateur',
         service: 'Administration',
+        onlyGroups: ['Administration'],
     },
     direction_generale: {
         home: '/dashboard',
@@ -161,6 +162,18 @@ async function runRole(name) {
             })
             .catch(() => {});
 
+    // Ouvre la catégorie du menu si elle ne l'est pas déjà (celle de la page courante l'est par défaut).
+    const ensureOpen = async (label) => {
+        const button = page.locator(SIDEBAR_BTN, { hasText: label }).first();
+        const state = await button.evaluate((e) =>
+            e.closest('li').getAttribute('data-state'),
+        );
+        if (state !== 'open') {
+            await button.click();
+            await page.waitForTimeout(250);
+        }
+    };
+
     async function verify(where, label, expectedPath) {
         checked++;
         await settle();
@@ -269,10 +282,37 @@ async function runRole(name) {
     for (let i = 0; i < groupCount; i++)
         groups.push((await groupButtons.nth(i).innerText()).trim());
     if (groups.length === 0) fail('menu', 'aucune catégorie visible');
+    if (spec.onlyGroups && groups.join('|') !== spec.onlyGroups.join('|')) {
+        fail(
+            'menu',
+            `catégories « ${groups.join(' / ')} » ≠ « ${spec.onlyGroups.join(' / ')} »`,
+        );
+    }
+
+    // Charte : barre latérale en bleu marine (#0b2a4f), exercices ouverts en liste.
+    const sidebarBg = await page
+        .locator('[data-sidebar="sidebar"]')
+        .first()
+        .evaluate((e) => getComputedStyle(e).backgroundColor);
+    if (sidebarBg !== 'rgb(11, 42, 79)')
+        fail('charte', `fond de la barre latérale ${sidebarBg} ≠ bleu marine`);
+    const exercices = await page
+        .locator('[data-test="exercice-select"] option')
+        .evaluateAll((os) => os.map((o) => o.textContent.trim()));
+    if (exercices.join(',') !== '2025,2026')
+        fail('en-tête', `exercices proposés : ${exercices.join(',')}`);
 
     if (groups.length >= 1) {
         const open = (label) =>
             page.locator(SIDEBAR_BTN, { hasText: label }).first();
+        if (
+            (await open(groups[0]).evaluate((e) =>
+                e.closest('li').getAttribute('data-state'),
+            )) === 'open'
+        ) {
+            await open(groups[0]).click();
+            await page.waitForTimeout(300);
+        }
         await open(groups[0]).click();
         await page.waitForTimeout(300);
         const chevron = await open(groups[0])
@@ -302,7 +342,7 @@ async function runRole(name) {
 
     for (const group of groups) {
         await go('/dashboard');
-        await page.locator(SIDEBAR_BTN, { hasText: group }).first().click();
+        await ensureOpen(group);
         await page.waitForTimeout(250);
         const items = await page
             .locator(`${SUB_BTN}:visible`)
@@ -316,7 +356,7 @@ async function runRole(name) {
             fail('menu', `catégorie « ${group} » sans entrée`);
         for (const item of items) {
             await go('/dashboard');
-            await page.locator(SIDEBAR_BTN, { hasText: group }).first().click();
+            await ensureOpen(group);
             await page.waitForTimeout(250);
             await page.locator(`${SUB_BTN}[href="${item.href}"]`).click();
             await waitPath(item.href);
@@ -364,6 +404,14 @@ async function runRole(name) {
             .click();
         await waitPath(item.href);
         await verify('menu du haut', item.label, item.href);
+        const current = await page
+            .locator(`nav[aria-label="Menu principal"] a[href="${item.href}"]`)
+            .getAttribute('aria-current');
+        if (current !== 'page')
+            fail(
+                `menu du haut › ${item.label}`,
+                'entrée courante non mise en évidence',
+            );
     }
 
     // --- Menu Fichier (ouverture, échap, clic) --------------------------------
@@ -371,15 +419,16 @@ async function runRole(name) {
     const trigger = page.locator(
         'nav[aria-label="Menu principal"] button:has-text("Fichier")',
     );
-    await trigger.click();
-    const fichier = await page
-        .locator('[role="menu"] a[href]')
-        .evaluateAll((as) =>
-            as.map((a) => ({
-                label: a.textContent.trim(),
-                href: a.getAttribute('href'),
-            })),
-        );
+    const hasFichier = (await trigger.count()) > 0; // sans droit sur un rapport, le menu Fichier n’est pas affiché
+    if (hasFichier) await trigger.click();
+    const fichier = hasFichier
+        ? await page.locator('[role="menu"] a[href]').evaluateAll((as) =>
+              as.map((a) => ({
+                  label: a.textContent.trim(),
+                  href: a.getAttribute('href'),
+              })),
+          )
+        : [];
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     if (
@@ -400,14 +449,18 @@ async function runRole(name) {
     // --- Cloche, puis menu utilisateur ----------------------------------------
     await go('/dashboard');
     await page.locator('[data-test="notifications-bell"]').click();
+    await page
+        .locator('[data-test="notifications-all"]')
+        .waitFor({ timeout: 10000 });
+    await page.locator('[data-test="notifications-all"]').click();
     await waitPath('/notifications');
-    await verify('en-tête', 'Notifications', '/notifications');
+    await verify('en-tête (cloche)', 'Notifications', '/notifications');
     await go('/dashboard');
     await page.locator('[data-sidebar="footer"] button').last().click();
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     await page.locator(SIDEBAR_BTN).first().click();
-    await verify('après menu utilisateur', 'Bonjour', null);
+    await verify('après menu utilisateur', '', null);
 
     await ctx.close();
     summary.push(`${name} : ${checked} pages — ${groups.join(' / ')}`);

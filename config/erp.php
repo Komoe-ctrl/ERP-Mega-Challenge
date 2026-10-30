@@ -37,6 +37,12 @@ return [
     | Lu uniquement par le seeder. Les valeurs viennent du .env, jamais du code.
     |
     */
+    // Compte du script de navigation e2e (local uniquement, voir erp:e2e-user).
+    'e2e' => [
+        'email' => env('E2E_EMAIL'),
+        'password' => env('E2E_PASSWORD'),
+    ],
+
     'demo_admin' => [
         'name' => env('ADMIN_NAME', 'Administrateur'),
         'email' => env('ADMIN_EMAIL'),

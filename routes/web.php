@@ -71,9 +71,6 @@ Route::middleware(['auth', 'verified', 'can:engins.view'])->prefix('engins')->na
     Route::get('{id}', fn (int $id) => Inertia::render('Engins/Show', ['id' => $id]))->whereNumber('id')->name('show');
 });
 Route::middleware(['auth', 'verified', 'can:finance.view'])->prefix('finance')->name('finance.')->group(function () {
-    Route::inertia('/', 'Finance/Index')->name('index');
-    Route::inertia('caisse', 'Finance/Operations', ['account' => 'caisse'])->name('caisse');
-    Route::inertia('banque', 'Finance/Operations', ['account' => 'banque'])->name('banque');
     Route::inertia('rentabilite', 'Finance/Rentabilite')->name('rentabilite');
     Route::inertia('tresorerie', 'Finance/Tresorerie')->name('tresorerie');
 });

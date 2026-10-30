@@ -4,11 +4,9 @@ import { computed, reactive } from 'vue';
 import { toast } from 'vue-sonner';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { number } from '@/lib/format';
-import { stocksNav } from '@/lib/navs';
 import { inventoryLines } from '@/mocks/v2';
 
 defineOptions({
@@ -40,7 +38,6 @@ function adjust() {
             title="Inventaire"
             description="Magasin Palmiers Bloc A · comptage du 29/10/2026. Les écarts sont ajustés après validation."
         />
-        <SubNav :links="stocksNav" />
 
         <section class="overflow-hidden rounded-xl border bg-card shadow-xs">
             <div class="overflow-x-auto">

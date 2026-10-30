@@ -1,4 +1,4 @@
-/** Menus de l'application actuelle, avec les libellés d'origine. */
+/** Menus de l'application : un seul menu latéral (accordéon), le menu du haut et le menu Fichier. */
 
 export type LegacyLink = {
     label: string;
@@ -7,67 +7,95 @@ export type LegacyLink = {
     permission: string;
 };
 
-export type LegacyGroup = {
+export type MenuItem = {
+    label: string;
+    href: string;
+    /** Permission minimale pour voir l'entrée ; vide = toujours visible. */
+    permission: string;
+};
+
+export type MenuGroup = {
     key: string;
     label: string;
-    items: LegacyLink[];
+    items: MenuItem[];
 };
 
 export const href = (slug: string): string => `/ecrans/${slug}`;
 
-export const rubriquesMenu: LegacyGroup[] = [
+const e = (label: string, slug: string, permission: string): MenuItem => ({
+    label,
+    href: href(slug),
+    permission,
+});
+
+/** Chaque écran n'apparaît qu'à un seul endroit. */
+export const sidebarMenu: MenuGroup[] = [
+    {
+        key: 'projets',
+        label: 'Projets et chantiers',
+        items: [
+            { label: 'Projets', href: '/projets', permission: 'projets.view' },
+            {
+                label: 'Chantiers',
+                href: '/chantiers',
+                permission: 'chantiers.view',
+            },
+            e('Planning', 'planning', 'chantiers.view'),
+            {
+                label: 'Budget chantier',
+                href: '/budget',
+                permission: 'budget.view',
+            },
+        ],
+    },
     {
         key: 'da',
         label: "Demandes d'achats (D.A.)",
         items: [
             {
                 label: "Demande d'achat",
-                slug: 'demande-achat',
+                href: '/achats/demandes',
                 permission: 'achats.view',
             },
             {
-                label: 'Élaborer une cotation',
-                slug: 'elaborer-cotation',
+                label: 'Cotations',
+                href: '/achats/consultations',
                 permission: 'achats.view',
             },
             {
-                label: 'Valider une cotation',
-                slug: 'valider-cotation',
-                permission: 'achats.validate',
-            },
-            {
-                label: 'Bon de commande',
-                slug: 'bon-de-commande',
+                label: 'Bons de commande',
+                href: '/achats/commandes',
                 permission: 'achats.view',
             },
             {
-                label: "Convertir une demande d'achat",
-                slug: 'convertir-da',
+                label: 'Bons de livraison',
+                href: '/achats/receptions',
                 permission: 'achats.view',
             },
             {
-                label: 'Approbation des comptes des pièces engagées',
-                slug: 'approbation-pieces-engagees',
-                permission: 'achats.validate',
+                label: 'Factures fournisseurs',
+                href: '/achats/factures',
+                permission: 'achats.view',
             },
+            e(
+                'Approbation des pièces engagées',
+                'approbation-pieces-engagees',
+                'achats.validate',
+            ),
             {
                 label: 'Validation',
-                slug: 'validation-da',
+                href: '/achats/a-valider',
                 permission: 'achats.validate',
             },
+            e('Suivi workflow', 'suivi-workflow-da', 'achats.view'),
             {
-                label: 'Bon de livraison',
-                slug: 'bon-de-livraison',
-                permission: 'achats.view',
+                label: 'Fournisseurs',
+                href: '/fournisseurs',
+                permission: 'fournisseurs.view',
             },
             {
-                label: 'Facture',
-                slug: 'facture-achat',
-                permission: 'achats.view',
-            },
-            {
-                label: 'Suivi « workflow »',
-                slug: 'suivi-workflow-da',
+                label: 'Référentiel des prix',
+                href: '/achats/referentiel',
                 permission: 'achats.view',
             },
         ],
@@ -76,21 +104,22 @@ export const rubriquesMenu: LegacyGroup[] = [
         key: 'nf',
         label: 'Notes de frais',
         items: [
+            e('Note de frais', 'note-de-frais', 'achats.view'),
+            e('Validation', 'validation-nf', 'achats.validate'),
+            e('Facture', 'facture-nf', 'achats.view'),
+            e('Suivi workflow', 'suivi-workflow-nf', 'achats.view'),
+        ],
+    },
+    {
+        key: 'commercial',
+        label: 'Commercial',
+        items: [
+            { label: 'Clients', href: '/clients', permission: 'clients.view' },
+            { label: 'Devis', href: '/devis', permission: 'devis.view' },
             {
-                label: 'Note de frais',
-                slug: 'note-de-frais',
-                permission: 'achats.view',
-            },
-            {
-                label: 'Validation',
-                slug: 'validation-nf',
-                permission: 'achats.validate',
-            },
-            { label: 'Facture', slug: 'facture-nf', permission: 'achats.view' },
-            {
-                label: 'Suivi « workflow »',
-                slug: 'suivi-workflow-nf',
-                permission: 'achats.view',
+                label: 'Marchés et contrats',
+                href: '/marches',
+                permission: 'marches.view',
             },
         ],
     },
@@ -99,81 +128,115 @@ export const rubriquesMenu: LegacyGroup[] = [
         label: 'Recettes',
         items: [
             {
-                label: 'Client facture / recette',
-                slug: 'recette',
-                permission: 'finance.view',
+                label: 'Situations de travaux',
+                href: '/situations',
+                permission: 'situations.view',
+            },
+            e('Client facture / recette', 'recette', 'finance.view'),
+            e('Validation', 'validation-recette', 'finance.validate'),
+            e('Recouvrement des créances', 'recouvrement', 'finance.view'),
+        ],
+    },
+    {
+        key: 'stocks',
+        label: 'Stocks',
+        items: [
+            {
+                label: 'État des stocks',
+                href: '/stocks',
+                permission: 'stocks.view',
             },
             {
-                label: 'Validation',
-                slug: 'validation-recette',
-                permission: 'finance.view',
+                label: 'Mouvements',
+                href: '/stocks/mouvements',
+                permission: 'stocks.view',
             },
             {
-                label: 'Recouvrement des créances',
-                slug: 'recouvrement',
-                permission: 'finance.view',
+                label: 'Inventaire',
+                href: '/stocks/inventaire',
+                permission: 'stocks.view',
             },
+        ],
+    },
+    {
+        key: 'ressources',
+        label: 'Ressources',
+        items: [
+            {
+                label: 'Main-d’œuvre',
+                href: '/main-oeuvre',
+                permission: 'main_oeuvre.view',
+            },
+            { label: 'RH', href: '/rh', permission: 'rh.view' },
+            { label: 'Engins', href: '/engins', permission: 'engins.view' },
         ],
     },
     {
         key: 'tresorerie',
         label: 'Trésorerie',
         items: [
-            {
-                label: 'Entrée de caisse',
-                slug: 'entree-de-caisse',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Bon à décaisser / à encaisser',
-                slug: 'bons-caisse',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Créances fournisseurs / B.C.',
-                slug: 'creances-fournisseurs',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Clôture de caisse',
-                slug: 'cloture-de-caisse',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Situation caisse',
-                slug: 'situation-caisse',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Engagements bancaires',
-                slug: 'engagements-bancaires',
-                permission: 'finance.view',
-            },
+            e('Entrée de caisse', 'entree-de-caisse', 'finance.view'),
+            e('Bon à décaisser / à encaisser', 'bons-caisse', 'finance.view'),
+            e(
+                'Créances fournisseurs / B.C.',
+                'creances-fournisseurs',
+                'finance.view',
+            ),
+            e('Clôture de caisse', 'cloture-de-caisse', 'finance.view'),
+            e('Situation caisse', 'situation-caisse', 'finance.view'),
+            e('Engagements bancaires', 'engagements-bancaires', 'finance.view'),
         ],
     },
     {
         key: 'compta',
         label: 'Comptabilité générale',
         items: [
+            e('Comptabilité générale', 'comptabilite-generale', 'finance.view'),
+            e(
+                'Export recettes vers SAARI',
+                'export-recettes-saari',
+                'finance.view',
+            ),
+            e(
+                'Export charges vers SAARI',
+                'export-charges-saari',
+                'finance.view',
+            ),
+            e(
+                'Justifier une pièce de caisse',
+                'justifier-piece-caisse',
+                'finance.view',
+            ),
+        ],
+    },
+    {
+        key: 'administration',
+        label: 'Administration',
+        items: [
             {
-                label: 'Comptabilité générale',
-                slug: 'comptabilite-generale',
-                permission: 'finance.view',
+                label: 'Utilisateurs',
+                href: '/administration/users',
+                permission: 'administration.view',
             },
             {
-                label: 'Export recettes vers SAARI',
-                slug: 'export-recettes-saari',
-                permission: 'finance.view',
+                label: 'Rôles',
+                href: '/administration/roles',
+                permission: 'administration.view',
+            },
+            e(
+                'Étapes de validation',
+                'etapes-de-validation',
+                'administration.view',
+            ),
+            {
+                label: 'Paramètres',
+                href: '/administration/parametres',
+                permission: 'administration.view',
             },
             {
-                label: 'Export charges vers SAARI',
-                slug: 'export-charges-saari',
-                permission: 'finance.view',
-            },
-            {
-                label: 'Justifier une pièce de caisse',
-                slug: 'justifier-piece-caisse',
-                permission: 'finance.view',
+                label: 'Journal des activités',
+                href: '/administration/journal',
+                permission: 'administration.view',
             },
         ],
     },
@@ -289,16 +352,10 @@ export const fichierMenu: (LegacyLink | 'separator')[] = [
         slug: 'livre-analytique-produits',
         permission: 'finance.view',
     },
-    'separator',
-    {
-        label: 'Étapes de validation',
-        slug: 'etapes-de-validation',
-        permission: 'administration.view',
-    },
 ];
 
 export const topMenu: { label: string; href: string; permission: string }[] = [
-    { label: 'Tableau de bord', href: '/dashboard', permission: 'achats.view' },
+    { label: 'Tableau de bord', href: '/dashboard', permission: '' },
     {
         label: 'Tableau de bord mensuel',
         href: href('tableau-de-bord-mensuel'),

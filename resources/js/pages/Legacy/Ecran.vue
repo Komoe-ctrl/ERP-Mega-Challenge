@@ -21,12 +21,6 @@ const props = defineProps<{ slug: string }>();
 type Piece = { kind: PieceKind; title: string; onlyStatus?: PieceStatus[] };
 
 const pieceScreens: Record<string, Piece> = {
-    'demande-achat': { kind: 'da', title: 'Demande d’achat' },
-    'validation-da': {
-        kind: 'da',
-        title: 'Validation des demandes d’achat',
-        onlyStatus: ['saisie', 'validee'],
-    },
     'note-de-frais': { kind: 'nf', title: 'Note de frais' },
     'validation-nf': {
         kind: 'nf',
@@ -66,6 +60,7 @@ const special: Record<
         component: Tableaux,
         props: { mode: 'situation' },
     },
+    planning: { component: Tableaux, props: { mode: 'planning' } },
     'tableau-de-bord-des-projets': {
         component: Tableaux,
         props: { mode: 'projets' },

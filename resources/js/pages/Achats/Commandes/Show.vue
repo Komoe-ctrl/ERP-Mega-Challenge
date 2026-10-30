@@ -5,10 +5,8 @@ import { computed } from 'vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa, number } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { requests } from '@/mocks/achats';
 import { invoices, orders, receptions } from '@/mocks/v2';
 
@@ -60,7 +58,6 @@ const orderInvoices = computed(() =>
                 ><Printer /> Imprimer</Button
             >
         </PageHeader>
-        <SubNav :links="achatsNav" />
 
         <section class="overflow-hidden rounded-xl border bg-card shadow-xs">
             <div class="overflow-x-auto">

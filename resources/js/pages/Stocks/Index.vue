@@ -6,11 +6,9 @@ import DataTable from '@/components/DataTable.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { amountCell } from '@/lib/cells';
 import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { fcfa, fcfaShort, number } from '@/lib/format';
-import { stocksNav } from '@/lib/navs';
 import { stockItems } from '@/mocks/v2';
 import type { StockItem } from '@/types/erp';
 
@@ -108,14 +106,13 @@ const filters: DataTableFilter[] = [
 </script>
 
 <template>
-    <Head title="Stocks" />
+    <Head title="État des stocks" />
 
     <div class="space-y-4 p-4">
         <PageHeader
-            title="Stocks BTP"
+            title="État des stocks"
             description="Un stock par magasin (dépôt central ou magasin de chantier), valorisé au coût moyen pondéré."
         />
-        <SubNav :links="stocksNav" />
 
         <div class="grid gap-3 sm:grid-cols-3">
             <KpiCard

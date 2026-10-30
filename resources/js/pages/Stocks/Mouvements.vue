@@ -7,12 +7,10 @@ import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { dateFr, number, TODAY } from '@/lib/format';
-import { stocksNav } from '@/lib/navs';
 import type { Tone } from '@/lib/status';
 import { chantiers } from '@/mocks/chantiers';
 import { stockItems, stockMovements } from '@/mocks/v2';
@@ -204,7 +202,6 @@ const filters: DataTableFilter[] = [
                 ><Plus /> Nouveau mouvement</Button
             >
         </PageHeader>
-        <SubNav :links="stocksNav" />
         <DataTable
             :columns="columns"
             :data="rows"

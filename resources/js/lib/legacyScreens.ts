@@ -2,7 +2,6 @@ import {
     bankCommitments,
     cashEntries,
     cashVouchers,
-    deliveryNotes,
     engagedAccounts,
     generalLedger,
     importedDatasets,
@@ -10,7 +9,6 @@ import {
     legacyInvoices,
     pieceTotal,
     projectTrees,
-    quotations,
     receivables,
     rubriques,
     saariCharges,
@@ -76,145 +74,6 @@ const noteTotals = projectTrees.map((t) => {
 });
 
 export const tableScreens: Record<string, TableScreen> = {
-    'elaborer-cotation': {
-        title: 'Élaborer une cotation',
-        description:
-            'Comparez les offres des fournisseurs consultés pour une demande d’achat.',
-        columns: [
-            { key: 'number', label: 'N° cotation' },
-            { key: 'da', label: 'D.A.' },
-            { key: 'suppliers', label: 'Fournisseurs consultés' },
-            { key: 'best', label: 'Meilleure offre', type: 'money' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: quotations.map((q) => ({
-            number: q.number,
-            da: q.daNumber,
-            suppliers: q.suppliers.map((s) => s.name).join(', '),
-            best: Math.min(...q.suppliers.map((s) => s.amount)),
-            status:
-                q.status === 'en_cours'
-                    ? 'En cours'
-                    : q.status === 'a_valider'
-                      ? 'À valider'
-                      : q.status === 'validee'
-                        ? 'Validée'
-                        : 'Convertie',
-        })),
-        actions: [
-            'Nouvelle cotation',
-            'Ajouter un fournisseur',
-            'Soumettre pour validation',
-        ],
-    },
-    'valider-cotation': {
-        title: 'Valider une cotation',
-        description:
-            'Retenez le fournisseur gagnant ; la cotation validée peut être convertie en bon de commande.',
-        columns: [
-            { key: 'number', label: 'N° cotation' },
-            { key: 'da', label: 'D.A.' },
-            { key: 'winner', label: 'Fournisseur retenu' },
-            { key: 'amount', label: 'Montant', type: 'money' },
-            { key: 'delay', label: 'Délai (jours)' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: quotations.map((q) => {
-            const best = [...q.suppliers].sort(
-                (a, b) => a.amount - b.amount,
-            )[0];
-
-            return {
-                number: q.number,
-                da: q.daNumber,
-                winner: best.name,
-                amount: best.amount,
-                delay: best.delay,
-                status:
-                    q.status === 'a_valider'
-                        ? 'À valider'
-                        : q.status === 'validee'
-                          ? 'Validée'
-                          : q.status === 'en_cours'
-                            ? 'En cours'
-                            : 'Convertie',
-            };
-        }),
-        rowAction: {
-            label: 'Valider la cotation',
-            field: 'status',
-            value: 'Validée',
-            done: 'Cotation validée (maquette).',
-        },
-    },
-    'bon-de-commande': {
-        title: 'Bon de commande',
-        description: 'Bons de commande émis à partir des cotations validées.',
-        columns: [
-            { key: 'number', label: 'N° B.C.' },
-            { key: 'da', label: 'D.A.' },
-            { key: 'supplier', label: 'Fournisseur' },
-            { key: 'amount', label: 'Montant', type: 'money' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: [
-            {
-                number: 'BC-2026-0092',
-                da: 'DA-2026-0142',
-                supplier: 'Comptoir du Bâtiment',
-                amount: 3_980_000,
-                status: 'Brouillon',
-            },
-            {
-                number: 'BC-2026-0088',
-                da: 'DA-2026-0139',
-                supplier: 'Peintures d’Afrique',
-                amount: 576_000,
-                status: 'Émis',
-            },
-            {
-                number: 'BC-2026-0081',
-                da: 'DA-2026-0131',
-                supplier: 'BTP Location',
-                amount: 5_320_000,
-                status: 'Livré en partie',
-            },
-        ],
-        totals: ['amount'],
-        actions: ['Nouveau bon de commande', 'Imprimer'],
-        rowAction: {
-            label: 'Émettre',
-            field: 'status',
-            value: 'Émis',
-            done: 'Bon de commande émis (maquette).',
-        },
-    },
-    'convertir-da': {
-        title: 'Convertir une demande d’achat',
-        description: 'Transformez une D.A. approuvée en bon de commande.',
-        columns: [
-            { key: 'number', label: 'D.A.' },
-            { key: 'title', label: 'Intitulé' },
-            { key: 'requester', label: 'Demandeur' },
-            { key: 'amount', label: 'Montant', type: 'money' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: initialPieces
-            .filter((p) => p.kind === 'da')
-            .map((p) => ({
-                number: p.number,
-                title: p.title,
-                requester: p.requester,
-                amount: pieceTotal(p.lines),
-                status: p.bcNumber ? 'Convertie' : 'À convertir',
-            })),
-        rowAction: {
-            label: 'Convertir en bon de commande',
-            field: 'status',
-            value: 'Convertie',
-            done: 'Bon de commande créé à partir de la D.A. (maquette).',
-        },
-    },
     'approbation-pieces-engagees': {
         title: 'Approbation des comptes des pièces engagées',
         description:
@@ -239,67 +98,6 @@ export const tableScreens: Record<string, TableScreen> = {
             field: 'status',
             value: 'Approuvée',
             done: 'Engagement approuvé (maquette).',
-        },
-    },
-    'bon-de-livraison': {
-        title: 'Bon de livraison',
-        description: 'Réceptions rattachées aux bons de commande.',
-        columns: [
-            { key: 'number', label: 'N° B.L.' },
-            { key: 'bc', label: 'N° B.C.' },
-            { key: 'supplier', label: 'Fournisseur' },
-            { key: 'date', label: 'Date', type: 'date' },
-            { key: 'lines', label: 'Lignes' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: deliveryNotes.map((d) => ({
-            number: d.number,
-            bc: d.bcNumber,
-            supplier: d.supplier,
-            date: d.date,
-            lines: d.lines,
-            status:
-                d.status === 'recu'
-                    ? 'Reçu'
-                    : d.status === 'partiel'
-                      ? 'Partiel'
-                      : 'Attendu',
-        })),
-        actions: ['Nouveau bon de livraison'],
-        rowAction: {
-            label: 'Marquer comme reçu',
-            field: 'status',
-            value: 'Reçu',
-            done: 'Livraison enregistrée (maquette).',
-        },
-    },
-    'facture-achat': {
-        title: 'Facture',
-        description:
-            'Factures fournisseurs rapprochées des bons de commande et de livraison.',
-        columns: [
-            { key: 'number', label: 'N° facture' },
-            { key: 'party', label: 'Fournisseur' },
-            { key: 'date', label: 'Date', type: 'date' },
-            { key: 'amount', label: 'Montant', type: 'money' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: legacyInvoices
-            .filter((i) => i.kind === 'achat')
-            .map((i) => ({
-                number: i.number,
-                party: i.party,
-                date: i.date,
-                amount: i.amount,
-                status: i.status === 'payee' ? 'Payée' : 'À payer',
-            })),
-        totals: ['amount'],
-        actions: ['Nouvelle facture'],
-        rowAction: {
-            label: 'Marquer comme payée',
-            field: 'status',
-            value: 'Payée',
-            done: 'Facture soldée (maquette).',
         },
     },
     'facture-nf': {

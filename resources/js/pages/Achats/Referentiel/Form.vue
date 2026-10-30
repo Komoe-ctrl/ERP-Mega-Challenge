@@ -6,10 +6,8 @@ import ArticleController from '@/actions/App/Http/Controllers/Achats/ArticleCont
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SchemaForm from '@/components/erp/SchemaForm.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import type { Article } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
@@ -136,7 +134,6 @@ function onDisable(reason: string) {
                     : 'Un article porte une référence, une unité et un prix unitaire en FCFA.'
             "
         />
-        <SubNav :links="achatsNav" />
 
         <div class="space-y-4 rounded-xl border bg-card p-4 shadow-xs sm:p-6">
             <p

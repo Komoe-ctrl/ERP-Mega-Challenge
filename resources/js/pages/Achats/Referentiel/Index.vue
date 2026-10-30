@@ -7,14 +7,12 @@ import ArticleController from '@/actions/App/Http/Controllers/Achats/ArticleCont
 import MissingArticleReportController from '@/actions/App/Http/Controllers/Achats/MissingArticleReportController';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { amountCell, linkCell, toneBadgeCell } from '@/lib/cells';
 import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import type { Paginated } from '@/types';
 import type { Article, MissingArticleReport } from '@/types/erp';
 
@@ -139,7 +137,6 @@ const columns: DataTableColumn<Article>[] = [
                 >
             </Button>
         </PageHeader>
-        <SubNav :links="achatsNav" />
 
         <p
             v-if="!canWrite"

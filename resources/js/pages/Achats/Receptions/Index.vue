@@ -6,11 +6,9 @@ import { toast } from 'vue-sonner';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { dateFr, number, TODAY } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { orders, receptions } from '@/mocks/v2';
 import type { Reception } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
@@ -101,11 +99,11 @@ function create(v: FieldValues) {
 </script>
 
 <template>
-    <Head title="Réceptions" />
+    <Head title="Bons de livraison" />
 
     <div class="space-y-4 p-4">
         <PageHeader
-            title="Réceptions"
+            title="Bons de livraison (réceptions)"
             description="Quantités réellement livrées ; un écart avec la commande génère un reliquat ou un retour (RG8.9)."
         >
             <Button
@@ -114,7 +112,6 @@ function create(v: FieldValues) {
                 ><Plus /> Enregistrer une réception</Button
             >
         </PageHeader>
-        <SubNav :links="achatsNav" />
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article

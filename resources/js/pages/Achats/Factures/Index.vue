@@ -6,13 +6,11 @@ import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell } from '@/lib/cells';
 import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { addDays, dateFr, fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { statuses } from '@/lib/status';
 import { invoices, orders, receptions } from '@/mocks/v2';
 import type { SupplierInvoice } from '@/types/erp';
@@ -224,7 +222,6 @@ const filters: DataTableFilter[] = [
                 ><Plus /> Saisir une facture</Button
             >
         </PageHeader>
-        <SubNav :links="achatsNav" />
         <DataTable
             :columns="columns"
             :data="rows"

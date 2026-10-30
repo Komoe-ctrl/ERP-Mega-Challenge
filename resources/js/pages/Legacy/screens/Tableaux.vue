@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import BarChart from '@/components/charts/BarChart.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
@@ -6,9 +7,11 @@ import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { dateFr, fcfa, percent } from '@/lib/format';
 import { monthlyFigures, rubriques } from '@/mocks/legacy';
-import { projects } from '@/mocks/chantiers';
+import { chantiers, projects } from '@/mocks/chantiers';
 
-const props = defineProps<{ mode: 'mensuel' | 'situation' | 'projets' }>();
+const props = defineProps<{
+    mode: 'mensuel' | 'situation' | 'projets' | 'planning';
+}>();
 
 const titles = {
     mensuel: [
@@ -18,6 +21,10 @@ const titles = {
     situation: [
         'Situation des projets',
         'État, budget et échéance de chaque projet.',
+    ],
+    planning: [
+        'Planning',
+        'Calendrier des chantiers ; le diagramme de Gantt détaillé est dans la fiche de chaque chantier.',
     ],
     projets: [
         'Tableau de bord des projets',
@@ -108,6 +115,44 @@ const active = computed(
                             {{ fcfa(p.budget) }}
                         </td>
                         <td class="px-3 py-2">{{ dateFr(p.endDate) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div
+            v-else-if="props.mode === 'planning'"
+            class="overflow-x-auto rounded-xl border bg-card shadow-xs"
+        >
+            <table class="w-full min-w-[36rem] text-sm">
+                <thead
+                    class="border-b bg-muted/50 text-left text-xs text-muted-foreground"
+                >
+                    <tr>
+                        <th class="px-3 py-2">Chantier</th>
+                        <th class="px-3 py-2">État</th>
+                        <th class="px-3 py-2">Début</th>
+                        <th class="px-3 py-2">Fin prévue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="c in chantiers"
+                        :key="c.id"
+                        class="border-b last:border-0"
+                    >
+                        <td class="px-3 py-2 font-medium">
+                            <Link
+                                :href="`/chantiers/${c.id}`"
+                                class="hover:underline"
+                                >{{ c.name }}</Link
+                            >
+                        </td>
+                        <td class="px-3 py-2">
+                            <StatusBadge kind="site" :status="c.status" />
+                        </td>
+                        <td class="px-3 py-2">{{ dateFr(c.startDate) }}</td>
+                        <td class="px-3 py-2">{{ dateFr(c.endDate) }}</td>
                     </tr>
                 </tbody>
             </table>

@@ -4,10 +4,8 @@ import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/Pur
 import EmptyState from '@/components/erp/EmptyState.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import type { PurchaseRequest } from '@/types/erp';
 
 type Pending = Omit<PurchaseRequest, 'lines' | 'history'> & {
@@ -30,7 +28,6 @@ defineOptions({
             title="Demandes à valider"
             :description="`${pending.length} demande(s) en attente de décision.`"
         />
-        <SubNav :links="achatsNav" />
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article

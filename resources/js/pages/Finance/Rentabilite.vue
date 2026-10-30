@@ -11,7 +11,10 @@ import { profitability } from '@/mocks/v4';
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Finance', href: '/finance' },
+            {
+                title: 'Comptabilité générale',
+                href: '/ecrans/comptabilite-generale',
+            },
             { title: 'Rentabilité', href: '/finance/rentabilite' },
         ],
     },

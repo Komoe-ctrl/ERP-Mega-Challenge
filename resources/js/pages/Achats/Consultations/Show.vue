@@ -6,11 +6,9 @@ import { toast } from 'vue-sonner';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { consultations, suppliers } from '@/mocks/v2';
 import type { Quote } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
@@ -117,7 +115,6 @@ function choose() {
                 ><Plus /> Ajouter une offre</Button
             >
         </PageHeader>
-        <SubNav :links="achatsNav" />
 
         <p class="text-sm text-muted-foreground">{{ consultation.items }}</p>
 

@@ -11,7 +11,10 @@ import { treasury } from '@/mocks/v4';
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Finance', href: '/finance' },
+            {
+                title: 'Comptabilité générale',
+                href: '/ecrans/comptabilite-generale',
+            },
             { title: 'Trésorerie', href: '/finance/tresorerie' },
         ],
     },

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronRight } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
     Collapsible,
     CollapsibleContent,
@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/collapsible';
 import {
     SidebarGroup,
-    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -17,25 +16,54 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { usePermissions } from '@/composables/usePermissions';
-import { href, rubriquesMenu } from '@/lib/legacyMenu';
+import { sidebarMenu } from '@/lib/legacyMenu';
 
+const page = usePage();
 const { can } = usePermissions();
-const { isCurrentUrl } = useCurrentUrl();
 
-// Une seule rubrique ouverte à la fois, comme dans l'application actuelle.
+const path = computed(() => page.url.split('?')[0]);
+
+// Menu unique, filtré par rôle ; les groupes sans écran autorisé disparaissent.
 const groups = computed(() =>
-    rubriquesMenu
-        .map((g) => ({ ...g, items: g.items.filter((i) => can(i.permission)) }))
+    sidebarMenu
+        .map((g) => ({
+            ...g,
+            items: g.items.filter((i) => !i.permission || can(i.permission)),
+        }))
         .filter((g) => g.items.length > 0),
 );
-const opened = ref<string | null>(null);
+
+// L'entrée la plus précise qui correspond à l'URL est active.
+const activeHref = computed(
+    () =>
+        groups.value
+            .flatMap((g) => g.items)
+            .filter(
+                (i) =>
+                    path.value === i.href ||
+                    path.value.startsWith(i.href + '/'),
+            )
+            .sort((a, b) => b.href.length - a.href.length)[0]?.href,
+);
+const groupOfActive = computed(
+    () =>
+        groups.value.find((g) =>
+            g.items.some((i) => i.href === activeHref.value),
+        )?.key ?? null,
+);
+
+// Une seule catégorie ouverte à la fois ; celle de la page courante s'ouvre seule.
+const opened = ref<string | null>(groupOfActive.value);
+watch(groupOfActive, (key) => {
+    if (key) {
+        opened.value = key;
+    }
+});
 </script>
 
 <template>
     <SidebarGroup class="px-2 py-0">
-        <SidebarGroupLabel>Rubriques</SidebarGroupLabel>
         <SidebarMenu>
             <Collapsible
                 v-for="g in groups"
@@ -46,7 +74,7 @@ const opened = ref<string | null>(null);
             >
                 <SidebarMenuItem>
                     <CollapsibleTrigger as-child>
-                        <SidebarMenuButton :tooltip="g.label">
+                        <SidebarMenuButton>
                             <span>{{ g.label }}</span>
                             <ChevronRight
                                 class="ml-auto transition-transform"
@@ -58,13 +86,13 @@ const opened = ref<string | null>(null);
                         <SidebarMenuSub>
                             <SidebarMenuSubItem
                                 v-for="item in g.items"
-                                :key="item.slug"
+                                :key="item.href"
                             >
                                 <SidebarMenuSubButton
                                     as-child
-                                    :is-active="isCurrentUrl(href(item.slug))"
+                                    :is-active="item.href === activeHref"
                                 >
-                                    <Link :href="href(item.slug)">
+                                    <Link :href="item.href">
                                         <span>{{ item.label }}</span>
                                     </Link>
                                 </SidebarMenuSubButton>

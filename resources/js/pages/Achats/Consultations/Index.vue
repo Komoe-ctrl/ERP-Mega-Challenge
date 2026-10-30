@@ -6,13 +6,11 @@ import { toast } from 'vue-sonner';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
 import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { statuses } from '@/lib/status';
 import { requestTotal, requests } from '@/mocks/achats';
 import { consultations } from '@/mocks/v2';
@@ -143,18 +141,17 @@ const filters: DataTableFilter[] = [
 </script>
 
 <template>
-    <Head title="Consultations" />
+    <Head title="Cotations" />
 
     <div class="space-y-4 p-4">
         <PageHeader
-            title="Consultations de fournisseurs"
+            title="Cotations des fournisseurs"
             description="Au-delà du seuil paramétré, au moins trois fournisseurs sont consultés avant commande (RG8.11)."
         >
             <Button v-if="can('achats.create')" @click="createOpen = true"
                 ><Plus /> Nouvelle consultation</Button
             >
         </PageHeader>
-        <SubNav :links="achatsNav" />
         <DataTable
             :columns="columns"
             :data="rows"

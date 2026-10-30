@@ -5,7 +5,6 @@ import { ref } from 'vue';
 import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/PurchaseRequestController';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
-import SubNav from '@/components/erp/SubNav.vue';
 import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +12,6 @@ import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
 import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa } from '@/lib/format';
-import { achatsNav } from '@/lib/navs';
 import { statuses } from '@/lib/status';
 import type { Paginated } from '@/types';
 import type { PurchaseRequest } from '@/types/erp';
@@ -100,8 +98,6 @@ const columns: DataTableColumn<Row>[] = [
                 >
             </Button>
         </PageHeader>
-
-        <SubNav :links="achatsNav" />
 
         <div class="flex flex-wrap gap-3">
             <form

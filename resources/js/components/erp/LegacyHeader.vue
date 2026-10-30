@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3';
-import { ChevronDown, LogOut } from '@lucide/vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { Bell, ChevronDown, LogOut } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import {
@@ -17,6 +17,8 @@ import { services } from '@/mocks/legacy';
 
 const { session, postes, poste } = useLegacySession();
 const { can } = usePermissions();
+const page = usePage();
+const unread = computed(() => page.props.unreadNotifications);
 
 const service = computed(
     () => services.find((s) => s.id === poste.value.serviceId) ?? services[0],
@@ -25,10 +27,12 @@ const visibleFichier = computed(() =>
     fichierMenu.filter((item, index, all) =>
         item === 'separator'
             ? index > 0 && all[index - 1] !== 'separator'
-            : can(item.permission),
+            : !item.permission || can(item.permission),
     ),
 );
-const visibleTop = computed(() => topMenu.filter((m) => can(m.permission)));
+const visibleTop = computed(() =>
+    topMenu.filter((m) => !m.permission || can(m.permission)),
+);
 
 function quit() {
     router.post('/logout');
@@ -105,6 +109,23 @@ function quit() {
                 class="rounded-md px-2.5 py-1.5 hover:bg-accent"
             >
                 {{ m.label }}
+            </Link>
+            <Link
+                href="/notifications"
+                class="relative ml-auto rounded-md p-2 hover:bg-accent"
+                :aria-label="
+                    unread
+                        ? `Notifications (${unread} non lues)`
+                        : 'Notifications'
+                "
+                data-test="notifications-bell"
+            >
+                <Bell class="size-5" />
+                <span
+                    v-if="unread"
+                    class="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-cta px-1 text-center text-[10px] font-semibold text-cta-foreground"
+                    >{{ unread }}</span
+                >
             </Link>
         </nav>
     </div>

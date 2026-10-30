@@ -8,7 +8,6 @@ import PageHeader from '@/components/erp/PageHeader.vue';
 import { tableScreens } from '@/lib/legacyScreens';
 import type { PieceKind, PieceStatus } from '@/types/legacy';
 import Budget from './screens/Budget.vue';
-import EtapesValidation from './screens/EtapesValidation.vue';
 import SuiviWorkflow from './screens/SuiviWorkflow.vue';
 import Tableaux from './screens/Tableaux.vue';
 
@@ -45,7 +44,6 @@ const special: Record<
     string,
     { component: Component; props: Record<string, unknown> }
 > = {
-    'etapes-de-validation': { component: EtapesValidation, props: {} },
     'exercice-budgetaire': { component: Budget, props: { mode: 'exercice' } },
     'elaboration-budgetaire': {
         component: Budget,

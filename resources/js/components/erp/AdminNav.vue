@@ -9,6 +9,10 @@ const links: { href: string; label: string; exact?: boolean }[] = [
     { href: '/administration/users', label: 'Utilisateurs' },
     { href: '/administration/roles', label: 'Rôles' },
     { href: '/administration/matrice', label: 'Matrice des droits' },
+    {
+        href: '/administration/etapes-de-validation',
+        label: 'Étapes de validation',
+    },
     { href: '/administration/organisation', label: 'Agences, services, sites' },
     { href: '/administration/parametres', label: 'Paramètres' },
     { href: '/administration/journal', label: 'Journal des activités' },

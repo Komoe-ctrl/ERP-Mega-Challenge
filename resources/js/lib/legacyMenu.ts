@@ -252,11 +252,11 @@ export const sidebarMenu: MenuGroup[] = [
                 href: '/administration/roles',
                 permission: 'administration.view',
             },
-            e(
-                'Étapes de validation',
-                'etapes-de-validation',
-                'administration.view',
-            ),
+            {
+                label: 'Étapes de validation',
+                href: '/administration/etapes-de-validation',
+                permission: 'administration.view',
+            },
             {
                 label: 'Paramètres',
                 href: '/administration/parametres',

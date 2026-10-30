@@ -1,22 +1,32 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { FileSpreadsheet, Plus } from '@lucide/vue';
 import { ref } from 'vue';
 import { toast } from 'vue-sonner';
-import FormDialog from '@/components/erp/FormDialog.vue';
-import type { FieldDef, FieldValues } from '@/types/forms';
-import { computed } from 'vue';
+import ArticleController from '@/actions/App/Http/Controllers/Achats/ArticleController';
+import MissingArticleReportController from '@/actions/App/Http/Controllers/Achats/MissingArticleReportController';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SubNav from '@/components/erp/SubNav.vue';
-import { achatsNav } from '@/lib/navs';
-import StatusBadge from '@/components/erp/StatusBadge.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { amountCell, linkCell, toneBadgeCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa } from '@/lib/format';
-import { articles, categories, missingArticleReports } from '@/mocks/achats';
-import type { Article } from '@/types/erp';
+import { achatsNav } from '@/lib/navs';
+import type { Paginated } from '@/types';
+import type { Article, MissingArticleReport } from '@/types/erp';
+
+type Filters = { q: string; category: string; state: string };
+
+const props = defineProps<{
+    articles: Paginated<Article>;
+    filters: Filters;
+    categories: string[];
+    canWrite: boolean;
+    missingReports: MissingArticleReport[];
+}>();
 
 defineOptions({
     layout: {
@@ -27,26 +37,43 @@ defineOptions({
     },
 });
 
-const page = usePage();
-// RG8.13 : seul le Service Achats BTP crée, modifie ou désactive un article.
-const isPurchasing = computed(() =>
-    page.props.auth.roles.includes('service_achats_btp'),
-);
+const search = ref(props.filters.q);
 
-const importOpen = ref(false);
-const importFields: FieldDef[] = [
-    {
-        name: 'file',
-        label: 'Fichier Excel ou CSV',
-        type: 'file',
-        required: true,
-        wide: true,
-        hint: 'Colonnes : référence, libellé, catégorie, unité, prix unitaire (FCFA). Chargement initial du référentiel (RG8.16).',
-    },
-];
-function importArticles(v: FieldValues) {
-    toast.success(
-        `Import de « ${String(v.file)} » : 26 articles créés, 0 rejeté (maquette).`,
+function apply(changes: Partial<Filters>) {
+    const next = { ...props.filters, ...changes };
+
+    router.get(
+        ArticleController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
+
+// RG8.16 : chargement initial par Excel ou CSV ; le serveur refuse tout si une ligne est invalide.
+function importArticles(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (file) {
+        router.post(
+            ArticleController.import.url(),
+            { file },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onError: (errors) => toast.error(Object.values(errors)[0]),
+            },
+        );
+    }
+
+    input.value = '';
+}
+
+function resolve(id: number) {
+    router.patch(
+        MissingArticleReportController.resolve.url(id),
+        {},
+        { preserveScroll: true },
     );
 }
 
@@ -56,12 +83,12 @@ const columns: DataTableColumn<Article>[] = [
         header: 'Article',
         cell: ({ row }) =>
             linkCell(
-                `/achats/referentiel/${row.original.id}`,
+                ArticleController.edit.url(row.original.id),
                 row.original.label,
                 row.original.reference,
             ),
     },
-    { accessorKey: 'category', header: 'Catégorie', filterFn: 'equalsString' },
+    { accessorKey: 'category', header: 'Catégorie' },
     { accessorKey: 'unit', header: 'Unité' },
     {
         accessorKey: 'price',
@@ -76,29 +103,11 @@ const columns: DataTableColumn<Article>[] = [
     {
         id: 'active',
         header: 'État',
-        accessorFn: (a) => (a.active ? 'actif' : 'inactif'),
-        filterFn: 'equalsString',
         cell: ({ row }) =>
             toneBadgeCell(
                 row.original.active ? 'Actif' : 'Désactivé',
                 row.original.active ? 'success' : 'neutral',
             ),
-    },
-];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'category',
-        label: 'Catégorie',
-        options: categories.map((c) => ({ value: c, label: c })),
-    },
-    {
-        columnId: 'active',
-        label: 'État',
-        options: [
-            { value: 'actif', label: 'Actifs' },
-            { value: 'inactif', label: 'Désactivés' },
-        ],
     },
 ];
 </script>
@@ -111,14 +120,21 @@ const filters: DataTableFilter[] = [
             title="Référentiel des prix"
             description="Prix de référence interne : le demandeur ne saisit jamais de prix."
         >
-            <Button
-                v-if="isPurchasing"
-                variant="outline"
-                @click="importOpen = true"
-                ><FileSpreadsheet /> Importer Excel / CSV</Button
+            <label
+                v-if="canWrite"
+                class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent"
+                title="Colonnes : référence, libellé, catégorie, unité, prix unitaire (FCFA). Première ligne = en-tête."
             >
-            <Button v-if="isPurchasing" as-child>
-                <Link href="/achats/referentiel/creer"
+                <FileSpreadsheet class="size-4" /> Importer Excel / CSV
+                <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    class="sr-only"
+                    @change="importArticles"
+                />
+            </label>
+            <Button v-if="canWrite" as-child>
+                <Link :href="ArticleController.create.url()"
                     ><Plus /> Nouvel article</Link
                 >
             </Button>
@@ -126,30 +142,73 @@ const filters: DataTableFilter[] = [
         <SubNav :links="achatsNav" />
 
         <p
-            v-if="!isPurchasing"
+            v-if="!canWrite"
             class="rounded-lg bg-muted p-3 text-sm text-muted-foreground"
         >
             Consultation seule : seul le Service Achats BTP peut créer ou
             modifier un article ou un prix.
         </p>
 
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher un article, une référence…"
+                    aria-label="Rechercher un article"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par catégorie"
+                :value="filters.category"
+                @change="
+                    apply({
+                        category: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Catégorie : toutes</option>
+                <option v-for="c in categories" :key="c" :value="c">
+                    {{ c }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par état"
+                :value="filters.state"
+                @change="
+                    apply({ state: ($event.target as HTMLSelectElement).value })
+                "
+            >
+                <option value="">État : tous</option>
+                <option value="actif">Actifs</option>
+                <option value="inactif">Désactivés</option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="articles"
-            :filters="filters"
-            search-placeholder="Rechercher un article, une référence…"
+            :data="articles.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun article ne correspond à ces filtres."
         />
+        <PaginationBar :page="articles" />
 
         <section
-            v-if="isPurchasing"
+            v-if="canWrite"
             class="rounded-xl border bg-card p-4 shadow-xs"
         >
             <h2 class="mb-3 font-display font-semibold">
-                Demandes d’ajout d’article ({{ missingArticleReports.length }})
+                Demandes d’ajout d’article ({{ missingReports.length }})
             </h2>
-            <ul class="divide-y text-sm">
+            <ul v-if="missingReports.length" class="divide-y text-sm">
                 <li
-                    v-for="m in missingArticleReports"
+                    v-for="m in missingReports"
                     :key="m.id"
                     class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                 >
@@ -160,17 +219,14 @@ const filters: DataTableFilter[] = [
                             {{ dateFr(m.date) }}</span
                         >
                     </span>
-                    <StatusBadge label="À traiter" tone="warning" />
+                    <Button size="sm" variant="outline" @click="resolve(m.id)"
+                        >Marquer comme traitée</Button
+                    >
                 </li>
             </ul>
+            <p v-else class="text-sm text-muted-foreground">
+                Aucune demande en attente.
+            </p>
         </section>
-        <FormDialog
-            v-model:open="importOpen"
-            title="Importer le référentiel"
-            description="Chargement initial par fichier Excel ou CSV."
-            :fields="importFields"
-            submit-label="Importer"
-            @submit="importArticles"
-        />
     </div>
 </template>

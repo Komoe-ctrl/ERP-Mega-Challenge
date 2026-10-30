@@ -106,7 +106,7 @@ export type Article = {
     price: number;
     active: boolean;
     updatedAt: string;
-    history: { date: string; price: number; by: string; reason: string }[];
+    history?: { date: string; price: number; by: string; reason: string }[];
 };
 
 export type RequestLine = {

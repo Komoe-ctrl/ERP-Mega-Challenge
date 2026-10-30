@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace App\Domain\Chantiers\Actions;
 
 use App\Domain\Chantiers\Models\Chantier;
-use App\Domain\Chantiers\Support\PlanningSheet;
+use App\Domain\Shared\Support\SheetReader;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
-use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
-use Throwable;
 
 /**
  * Import du planning depuis Excel (RG7.3). Colonnes : Tâche, Début, Fin prévue,
@@ -28,15 +26,7 @@ final class ImportPlanning
     /** @return int nombre de tâches créées */
     public function execute(Chantier $chantier, UploadedFile $file): int
     {
-        try {
-            $sheet = new PlanningSheet;
-            Excel::import($sheet, $file);
-        } catch (Throwable) {
-            throw ValidationException::withMessages(['file' => 'Le fichier Excel est illisible.']);
-        }
-
-        /** @var list<list<mixed>> $rows */
-        $rows = array_slice(array_values($sheet->rows), 1);
+        $rows = array_slice(SheetReader::read($file), 1);
         $rows = array_values(array_filter($rows, fn (array $r): bool => count(array_filter($r, fn ($c) => $c !== null && $c !== '')) > 0));
 
         if ($rows === []) {

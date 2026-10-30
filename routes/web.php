@@ -39,9 +39,6 @@ Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->na
     Route::get('commandes/{id}', fn (int $id) => Inertia::render('Achats/Commandes/Show', ['id' => $id]))->whereNumber('id')->name('commandes.show');
     Route::inertia('receptions', 'Achats/Receptions/Index')->name('receptions');
     Route::inertia('factures', 'Achats/Factures/Index')->name('factures');
-    Route::inertia('referentiel', 'Achats/Referentiel/Index')->name('referentiel');
-    Route::inertia('referentiel/creer', 'Achats/Referentiel/Form')->name('referentiel.create');
-    Route::get('referentiel/{id}', fn (int $id) => Inertia::render('Achats/Referentiel/Form', ['id' => $id]))->whereNumber('id')->name('referentiel.edit');
 });
 
 // --- V2 : Fournisseurs (M3) ---------------------------------------------------
@@ -127,3 +124,4 @@ require __DIR__.'/settings.php';
 require __DIR__.'/administration.php';
 require __DIR__.'/projets.php';
 require __DIR__.'/chantiers.php';
+require __DIR__.'/achats.php';

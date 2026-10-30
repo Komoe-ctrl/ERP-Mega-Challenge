@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ArticleController from '@/actions/App/Http/Controllers/Achats/ArticleController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SchemaForm from '@/components/erp/SchemaForm.vue';
@@ -9,10 +10,18 @@ import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa } from '@/lib/format';
 import { achatsNav } from '@/lib/navs';
-import { articles, categories, units } from '@/mocks/achats';
+import type { Article } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id?: number }>();
+const props = withDefaults(
+    defineProps<{
+        article: Article | null;
+        categories: string[];
+        units: string[];
+        canWrite?: boolean;
+    }>(),
+    { canWrite: true },
+);
 
 defineOptions({
     layout: {
@@ -23,14 +32,10 @@ defineOptions({
     },
 });
 
-const page = usePage();
-// RG8.13 : seul le Service Achats BTP crée, modifie ou désactive un article.
-const readonly = computed(
-    () => !page.props.auth.roles.includes('service_achats_btp'),
-);
-const article = computed(() => articles.find((a) => a.id === props.id));
+// RG8.13 : seul le Service Achats BTP crée, modifie ou désactive un article (droit décidé par le serveur).
+const readonly = computed(() => !props.canWrite);
 const title = computed(() =>
-    article.value ? article.value.label : 'Nouvel article',
+    props.article ? props.article.label : 'Nouvel article',
 );
 const disableOpen = ref(false);
 
@@ -39,15 +44,9 @@ const fields: FieldDef[] = [
         name: 'reference',
         label: 'Référence',
         required: true,
-        pattern: /^[A-Z]{3}-\d{3}$/,
+        pattern: /^[A-Za-z]{3}-\d{3}$/,
         patternMessage:
             'Format attendu : trois lettres, un tiret, trois chiffres (ex. CIM-003).',
-        validate: (value) =>
-            articles.some(
-                (a) => a.reference === value && a.id !== article.value?.id,
-            )
-                ? 'Cette référence existe déjà.'
-                : null,
     },
     { name: 'label', label: 'Libellé', required: true, minLength: 3 },
     {
@@ -55,14 +54,14 @@ const fields: FieldDef[] = [
         label: 'Catégorie',
         type: 'select',
         required: true,
-        options: categories.map((c) => ({ value: c, label: c })),
+        options: props.categories.map((c) => ({ value: c, label: c })),
     },
     {
         name: 'unit',
         label: 'Unité',
         type: 'select',
         required: true,
-        options: units.map((u) => ({ value: u, label: u })),
+        options: props.units.map((u) => ({ value: u, label: u })),
     },
     {
         name: 'price',
@@ -79,8 +78,8 @@ const fields: FieldDef[] = [
         label: 'Motif du changement de prix',
         type: 'textarea',
         validate: (value, values) =>
-            article.value &&
-            Number(values.price) !== article.value.price &&
+            props.article &&
+            Number(values.price) !== props.article.price &&
             !String(value ?? '').trim()
                 ? 'Indiquez le motif du changement de prix.'
                 : null,
@@ -88,26 +87,40 @@ const fields: FieldDef[] = [
 ];
 
 const initial: FieldValues = {
-    reference: article.value?.reference ?? '',
-    label: article.value?.label ?? '',
-    category: article.value?.category ?? '',
-    unit: article.value?.unit ?? '',
-    price: article.value?.price ?? null,
+    reference: props.article?.reference ?? '',
+    label: props.article?.label ?? '',
+    category: props.article?.category ?? '',
+    unit: props.article?.unit ?? '',
+    price: props.article?.price ?? null,
     reason: '',
 };
 
+// Le serveur refait toute la validation ; ses messages reviennent en notification.
 function submit(values: FieldValues) {
-    toast.success(
-        article.value && Number(values.price) !== article.value.price
-            ? 'Article enregistré : le changement de prix est historisé (maquette).'
-            : 'Article enregistré (maquette).',
-    );
-    router.visit('/achats/referentiel');
+    const options = {
+        onError: (errors: Record<string, string>) =>
+            toast.error(Object.values(errors)[0]),
+    };
+
+    if (props.article) {
+        router.put(
+            ArticleController.update.url(props.article.id),
+            values as never,
+            options,
+        );
+    } else {
+        router.post(ArticleController.store.url(), values as never, options);
+    }
 }
 
-function onDisable() {
-    toast.success('Article désactivé (maquette).');
-    router.visit('/achats/referentiel');
+function onDisable(reason: string) {
+    if (props.article) {
+        router.patch(
+            ArticleController.deactivate.url(props.article.id),
+            { reason },
+            { onError: (e) => toast.error(Object.values(e)[0]) },
+        );
+    }
 }
 </script>
 
@@ -138,7 +151,7 @@ function onDisable() {
                 :fields="fields"
                 :initial="initial"
                 @submit="submit"
-                @cancel="router.visit('/achats/referentiel')"
+                @cancel="router.visit(ArticleController.index.url())"
             >
                 <template #actions>
                     <Button
@@ -152,7 +165,9 @@ function onDisable() {
                 </template>
             </SchemaForm>
             <Button v-else variant="ghost" as-child
-                ><Link href="/achats/referentiel">Retour</Link></Button
+                ><Link :href="ArticleController.index.url()"
+                    >Retour</Link
+                ></Button
             >
             <p v-if="article" class="text-xs text-muted-foreground">
                 Un article déjà utilisé ne peut être que désactivé, jamais
@@ -176,8 +191,10 @@ function onDisable() {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="h in [...article.history].reverse()"
-                            :key="h.date"
+                            v-for="(h, i) in [
+                                ...(article.history ?? []),
+                            ].reverse()"
+                            :key="i"
                             class="border-t"
                         >
                             <td class="py-2 pr-4 whitespace-nowrap">

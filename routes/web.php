@@ -142,6 +142,12 @@ Route::middleware(['auth', 'verified', 'can:administration.view'])->prefix('admi
     ]))->name('matrice');
 });
 
+// --- Écrans repris de l'application de bureau actuelle (maquette) --------------
+Route::middleware(['auth', 'verified'])->prefix('ecrans')->group(function () {
+    Route::get('{slug}', fn (string $slug) => Inertia::render('Legacy/Ecran', ['slug' => $slug]))
+        ->where('slug', '[a-z0-9-]+')->name('ecrans');
+});
+
 /*
 |--------------------------------------------------------------------------
 | DÉMO LOCALE : changer de profil

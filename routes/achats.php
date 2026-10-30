@@ -1,8 +1,12 @@
 <?php
 
 use App\Http\Controllers\Achats\ArticleController;
+use App\Http\Controllers\Achats\ConsultationController;
 use App\Http\Controllers\Achats\MissingArticleReportController;
+use App\Http\Controllers\Achats\PurchaseOrderController;
 use App\Http\Controllers\Achats\PurchaseRequestController;
+use App\Http\Controllers\Achats\ReceptionController;
+use App\Http\Controllers\Achats\SupplierInvoiceController;
 use Illuminate\Support\Facades\Route;
 
 // M8 — Achats. Lecture : `achats.view` ; le reste est décidé par les policies.
@@ -32,4 +36,26 @@ Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->na
 
     Route::post('referentiel/signalements', [MissingArticleReportController::class, 'store'])->name('referentiel.signalements.store');
     Route::patch('referentiel/signalements/{report}/traiter', [MissingArticleReportController::class, 'resolve'])->whereNumber('report')->name('referentiel.signalements.resolve');
+});
+
+// M8.2 — Processus d'achat : consultations, comparatif, bons de commande.
+Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
+    Route::get('consultations', [ConsultationController::class, 'index'])->name('consultations');
+    Route::post('consultations', [ConsultationController::class, 'store'])->name('consultations.store');
+    Route::get('consultations/{consultation}', [ConsultationController::class, 'show'])->whereNumber('consultation')->name('consultations.show');
+    Route::post('consultations/{consultation}/offres', [ConsultationController::class, 'addQuote'])->whereNumber('consultation')->name('consultations.quotes.store');
+    Route::post('consultations/{consultation}/attribuer', [ConsultationController::class, 'award'])->whereNumber('consultation')->name('consultations.award');
+
+    Route::get('commandes', [PurchaseOrderController::class, 'index'])->name('commandes');
+    Route::post('commandes', [PurchaseOrderController::class, 'store'])->name('commandes.store');
+    Route::get('commandes/{order}', [PurchaseOrderController::class, 'show'])->whereNumber('order')->name('commandes.show');
+
+    Route::get('factures', [SupplierInvoiceController::class, 'index'])->name('factures');
+    Route::post('factures', [SupplierInvoiceController::class, 'store'])->name('factures.store');
+    Route::post('factures/{invoice}/controler', [SupplierInvoiceController::class, 'control'])->whereNumber('invoice')->name('factures.control');
+    Route::post('factures/{invoice}/payer', [SupplierInvoiceController::class, 'pay'])->whereNumber('invoice')->name('factures.pay');
+
+    Route::get('receptions', [ReceptionController::class, 'index'])->name('receptions');
+    Route::get('commandes/{order}/reception', [ReceptionController::class, 'create'])->whereNumber('order')->name('receptions.create');
+    Route::post('commandes/{order}/reception', [ReceptionController::class, 'store'])->whereNumber('order')->name('receptions.store');
 });

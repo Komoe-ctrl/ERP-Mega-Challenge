@@ -24,10 +24,11 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string|null $source_type
  * @property int|null $source_id
  * @property int $amount
+ * @property int $settled_amount
  * @property string $status
  * @property CarbonInterface|null $settled_at
  */
-#[Fillable(['chantier_id', 'budget_line_id', 'source_type', 'source_id', 'amount', 'status', 'settled_at'])]
+#[Fillable(['chantier_id', 'budget_line_id', 'source_type', 'source_id', 'amount', 'settled_amount', 'status', 'settled_at'])]
 class BudgetCommitment extends Model
 {
     use LogsActivity;
@@ -38,14 +39,14 @@ class BudgetCommitment extends Model
 
     protected function casts(): array
     {
-        return ['amount' => 'integer', 'settled_at' => 'datetime'];
+        return ['amount' => 'integer', 'settled_amount' => 'integer', 'settled_at' => 'datetime'];
     }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->useLogName('budget')
-            ->logOnly(['chantier_id', 'budget_line_id', 'source_type', 'source_id', 'amount', 'status'])
+            ->logOnly(['chantier_id', 'budget_line_id', 'source_type', 'source_id', 'amount', 'settled_amount', 'status'])
             ->logOnlyDirty();
     }
 

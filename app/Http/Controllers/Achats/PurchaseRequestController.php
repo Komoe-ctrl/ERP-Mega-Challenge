@@ -10,11 +10,15 @@ use App\Domain\Achats\Actions\RequestRouting;
 use App\Domain\Achats\Actions\SavePurchaseRequest;
 use App\Domain\Achats\Data\PurchaseRequestData;
 use App\Domain\Achats\Models\Article;
+use App\Domain\Achats\Models\PurchaseOrder;
 use App\Domain\Achats\Models\PurchaseRequest;
+use App\Domain\Achats\Models\Reception;
+use App\Domain\Achats\Models\SupplierInvoice;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Budget\Support\BudgetSummary;
 use App\Domain\Chantiers\Models\Chantier;
 use App\Domain\Shared\Enums\RoleName;
+use App\Domain\Shared\Support\Present;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Achats\SavePurchaseRequestRequest;
 use App\Http\Requests\Achats\ValidatePurchaseRequestRequest;
@@ -123,6 +127,8 @@ final class PurchaseRequestController extends Controller
             'canValidate' => $canDecide && (! $directionRequired || $user->hasRole(RoleName::DirectionGenerale->value)),
             'canCancel' => $user->can('cancel', $purchaseRequest),
             'canEdit' => $user->can('update', $purchaseRequest),
+            // CA8.2 : depuis la demande, ses bons de commande, réceptions, factures et leur état de paiement.
+            'purchasing' => $this->purchasingTrail($purchaseRequest),
         ]);
     }
 
@@ -179,6 +185,24 @@ final class PurchaseRequestController extends Controller
         $this->toast('Demande annulée.');
 
         return back();
+    }
+
+    /**
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function purchasingTrail(PurchaseRequest $purchaseRequest): array
+    {
+        $orders = PurchaseOrder::query()
+            ->whereHas('lines.requestLine', fn ($q) => $q->where('purchase_request_id', $purchaseRequest->id))
+            ->with('supplier')->orderBy('number')->get();
+
+        return [
+            'orders' => $orders->map(fn (PurchaseOrder $o): array => ['id' => $o->id, 'number' => $o->number, 'status' => $o->status, 'supplierName' => Present::text($o, 'supplier.name')])->values()->all(),
+            'receptions' => Reception::query()->whereIn('purchase_order_id', $orders->modelKeys())->orderBy('id')->get()
+                ->map(fn (Reception $r): array => ['id' => $r->id, 'number' => $r->number, 'gap' => $r->gap])->values()->all(),
+            'invoices' => SupplierInvoice::query()->whereIn('purchase_order_id', $orders->modelKeys())->orderBy('id')->get()
+                ->map(fn (SupplierInvoice $i): array => ['id' => $i->id, 'number' => $i->number, 'status' => $i->status])->values()->all(),
+        ];
     }
 
     private function user(Request $request): User

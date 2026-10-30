@@ -50,6 +50,12 @@ class Article extends Model
         return ['price' => 'integer', 'is_active' => 'boolean'];
     }
 
+    /** Catégorie de fournisseur qui peut livrer cet article (RG3.1). */
+    public function supplierCategory(): string
+    {
+        return $this->category === 'Équipements' ? 'Équipements' : 'Matériaux';
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

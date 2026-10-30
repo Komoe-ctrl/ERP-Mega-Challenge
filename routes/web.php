@@ -30,17 +30,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 |
 */
 
-// --- V1 : Achats — demandes et référentiel des prix (M8) --------------------
-Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
-    // V2 : processus achat complet (consultation, commande, réception, facture)
-    Route::inertia('consultations', 'Achats/Consultations/Index')->name('consultations');
-    Route::get('consultations/{id}', fn (int $id) => Inertia::render('Achats/Consultations/Show', ['id' => $id]))->whereNumber('id')->name('consultations.show');
-    Route::inertia('commandes', 'Achats/Commandes/Index')->name('commandes');
-    Route::get('commandes/{id}', fn (int $id) => Inertia::render('Achats/Commandes/Show', ['id' => $id]))->whereNumber('id')->name('commandes.show');
-    Route::inertia('receptions', 'Achats/Receptions/Index')->name('receptions');
-    Route::inertia('factures', 'Achats/Factures/Index')->name('factures');
-});
-
 // --- V2 : Stocks BTP (M9) ----------------------------------------------------
 Route::middleware(['auth', 'verified', 'can:stocks.view'])->prefix('stocks')->name('stocks.')->group(function () {
     Route::inertia('/', 'Stocks/Index')->name('index');

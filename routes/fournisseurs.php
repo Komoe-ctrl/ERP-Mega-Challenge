@@ -12,4 +12,5 @@ Route::middleware(['auth', 'verified', 'can:fournisseurs.view'])->prefix('fourni
     Route::patch('{supplier}/desactiver', [SupplierController::class, 'deactivate'])->whereNumber('supplier')->name('deactivate');
     Route::patch('{supplier}/reactiver', [SupplierController::class, 'reactivate'])->whereNumber('supplier')->name('reactivate');
     Route::post('{supplier}/tarifs', [SupplierController::class, 'setTariff'])->whereNumber('supplier')->name('tariffs.store');
+    Route::post('{supplier}/evaluations', [SupplierController::class, 'evaluate'])->whereNumber('supplier')->name('evaluations.store');
 });

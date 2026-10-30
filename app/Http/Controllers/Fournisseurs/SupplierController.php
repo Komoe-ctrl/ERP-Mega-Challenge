@@ -4,13 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Fournisseurs;
 
+use App\Domain\Achats\Data\PurchasingData;
 use App\Domain\Achats\Models\Article;
+use App\Domain\Achats\Models\PurchaseOrder;
+use App\Domain\Achats\Models\Reception;
+use App\Domain\Achats\Models\SupplierInvoice;
+use App\Domain\Fournisseurs\Actions\EvaluateSupplier;
 use App\Domain\Fournisseurs\Actions\SaveSupplier;
 use App\Domain\Fournisseurs\Actions\SetSupplierActive;
 use App\Domain\Fournisseurs\Actions\SetSupplierTariff;
 use App\Domain\Fournisseurs\Models\Supplier;
+use App\Domain\Fournisseurs\Models\SupplierEvaluation;
 use App\Domain\Fournisseurs\Models\SupplierTariff;
+use App\Domain\Shared\Support\Present;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Fournisseurs\EvaluateSupplierRequest;
 use App\Http\Requests\Fournisseurs\SaveSupplierRequest;
 use App\Http\Requests\Fournisseurs\SetTariffRequest;
 use App\Http\Requests\ReasonRequest;
@@ -87,6 +95,23 @@ final class SupplierController extends Controller
                 ->map(fn (Article $a): array => ['value' => (string) $a->id, 'label' => $a->label.' ('.$a->unit.')'])->values(),
             'categories' => Supplier::CATEGORIES,
             'canUpdate' => $user->can('update', $supplier),
+            // CA3 : commandes, factures non payées et évaluations du fournisseur.
+            'orders' => PurchaseOrder::query()->where('supplier_id', $supplier->id)->with(['supplier', 'chantier', 'lines.article', 'lines.requestLine.request'])->orderByDesc('number')->get()
+                ->map(fn (PurchaseOrder $o): array => PurchasingData::order($o))->values(),
+            'unpaidInvoices' => SupplierInvoice::query()->where('supplier_id', $supplier->id)->where('status', '!=', SupplierInvoice::PAID)->orderBy('due_date')->get()
+                ->map(fn (SupplierInvoice $i): array => ['id' => $i->id, 'number' => $i->number, 'dueDate' => $i->due_date->toDateString(), 'amount' => $i->amount, 'status' => $i->status])->values(),
+            'evaluations' => SupplierEvaluation::query()->where('supplier_id', $supplier->id)->with('reception')->latest('id')->get()
+                ->map(fn (SupplierEvaluation $e): array => [
+                    'reception' => Present::text($e, 'reception.number'),
+                    'delay' => $e->delay_score,
+                    'quality' => $e->quality_score,
+                    'price' => $e->price_score,
+                    'comment' => $e->comment ?? '',
+                ])->values(),
+            'evaluable' => $user->can('update', $supplier)
+                ? Reception::query()->whereHas('order', fn ($q) => $q->where('supplier_id', $supplier->id))->whereDoesntHave('evaluation')->orderBy('number')->get()
+                    ->map(fn (Reception $r): array => ['value' => (string) $r->id, 'label' => $r->number.' ('.$r->received_on->format('d/m/Y').')'])->values()
+                : [],
         ]);
     }
 
@@ -112,6 +137,22 @@ final class SupplierController extends Controller
         $this->authorize('update', $supplier);
         $action->execute($supplier, true, $this->user($request));
         $this->toast('Fournisseur réactivé.');
+
+        return back();
+    }
+
+    public function evaluate(EvaluateSupplierRequest $request, Supplier $supplier, EvaluateSupplier $action): RedirectResponse
+    {
+        $action->execute(
+            $supplier,
+            $request->integer('reception_id'),
+            $request->integer('delay'),
+            $request->integer('quality'),
+            $request->integer('price'),
+            $request->filled('comment') ? $request->string('comment')->toString() : null,
+            $this->user($request),
+        );
+        $this->toast('Évaluation enregistrée : la note moyenne est recalculée.');
 
         return back();
     }
@@ -154,10 +195,10 @@ final class SupplierController extends Controller
             'email' => $s->email,
             'city' => $s->city,
             'active' => $s->is_active,
-            // Note moyenne, commandes en cours et factures impayées : branchées avec le processus d'achat (V2).
-            'rating' => 0,
-            'openOrders' => 0,
-            'unpaidInvoices' => 0,
+            // CA3 : note moyenne (RG3.3), commandes en cours et factures non payées.
+            'rating' => EvaluateSupplier::average($s),
+            'openOrders' => PurchaseOrder::query()->where('supplier_id', $s->id)->whereIn('status', [PurchaseOrder::ISSUED, PurchaseOrder::PARTIAL])->count(),
+            'unpaidInvoices' => SupplierInvoice::query()->where('supplier_id', $s->id)->where('status', '!=', SupplierInvoice::PAID)->count(),
         ];
     }
 }

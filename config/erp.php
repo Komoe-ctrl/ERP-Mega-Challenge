@@ -43,4 +43,16 @@ return [
         'password' => env('ADMIN_PASSWORD'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Utilisateurs de démonstration
+    |--------------------------------------------------------------------------
+    |
+    | Un compte par profil (mot de passe : celui de ADMIN_PASSWORD), créés par
+    | le seeder uniquement si ERP_SEED_DEMO_USERS=true. À laisser à false en
+    | production.
+    |
+    */
+    'seed_demo_users' => (bool) env('ERP_SEED_DEMO_USERS', false),
+
 ];

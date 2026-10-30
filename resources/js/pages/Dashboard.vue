@@ -25,18 +25,86 @@ import { useLegacySession } from '@/composables/useLegacySession';
 import { usePermissions } from '@/composables/usePermissions';
 import { toast } from 'vue-sonner';
 import { dateFr, fcfa, fcfaShort, number, percent } from '@/lib/format';
-import { taskHealth } from '@/lib/planning';
 import { dashboard } from '@/routes';
-import {
-    budgetLevel,
-    budgetOf,
-    budgetTotals,
-    requestTotal,
-    requests,
-} from '@/mocks/achats';
-import { chantiers, projects, tasks } from '@/mocks/chantiers';
-import { notifications } from '@/mocks/transverse';
 import { invoices, orders, stockItems } from '@/mocks/v2';
+import type { RequestStatus, SiteStatus, TaskHealth } from '@/types/erp';
+
+type Level = 'ok' | 'warning' | 'critical';
+type TaskAlert = {
+    id: number;
+    name: string;
+    chantierId: number;
+    chantierName: string;
+    health: TaskHealth;
+};
+
+const props = defineProps<{
+    variant: 'terrain' | 'achats' | 'direction';
+    today: string;
+    terrain: {
+        chantiers: {
+            id: number;
+            code: string;
+            name: string;
+            status: SiteStatus;
+            location: string;
+            endDate: string;
+        }[];
+        primaryChantierId: number | null;
+        requests: {
+            id: number;
+            number: string;
+            status: RequestStatus;
+            total: number;
+        }[];
+        alerts: TaskAlert[];
+    } | null;
+    achats: {
+        toProcess: {
+            id: number;
+            number: string;
+            chantierName: string;
+            total: number;
+        }[];
+    } | null;
+    direction: {
+        projects: { inProgress: number; total: number } | null;
+        chantiers: { active: number; suspended: number } | null;
+        pending: {
+            count: number;
+            amount: number;
+            queue: {
+                id: number;
+                number: string;
+                chantierName: string;
+                requester: string;
+                needsDirection: boolean;
+            }[];
+        } | null;
+        budget: {
+            global: {
+                revised: number;
+                remaining: number;
+                consumption: number;
+                level: Level;
+            };
+            chart: { code: string; revised: number; consumed: number }[];
+            alerts: {
+                chantierId: number;
+                name: string;
+                consumption: number;
+                level: Level;
+            }[];
+        } | null;
+        taskAlerts: TaskAlert[];
+        notifications: {
+            id: string;
+            title: string;
+            body: string;
+            href: string;
+        }[];
+    } | null;
+}>();
 
 defineOptions({
     layout: {
@@ -53,89 +121,44 @@ function pointer() {
     toast.success('Arrivée enregistrée.');
 }
 const user = computed(() => page.props.auth.user);
-const roles = computed(() => page.props.auth.roles);
 
-/**
- * Tableau de bord par profil : terrain (mes chantiers, mes demandes), achats
- * (demandes à traiter, commandes en cours) ou direction (consolidé multi-chantiers).
- */
-type Variant = 'terrain' | 'achats' | 'direction';
-const variant = computed<Variant>(() => {
-    if (
-        roles.value.some((r) =>
-            ['chef_chantier', 'conducteur_travaux', 'magasinier'].includes(r),
-        )
-    ) {
-        return 'terrain';
-    }
-
-    if (
-        roles.value.some((r) =>
-            ['service_achats_btp', 'comptabilite'].includes(r),
-        )
-    ) {
-        return 'achats';
-    }
-
-    return 'direction';
-});
 const variantLabel = {
     terrain: 'Vue terrain',
     achats: 'Vue achats',
     direction: 'Vue direction',
 } as const;
 
-// --- Données communes
-const activeChantiers = chantiers.filter((c) => c.status === 'en_cours');
-const toValidate = requests.filter((r) => r.status === 'en_attente');
-const budgetByChantier = chantiers
-    .filter((c) => budgetOf(c.id).length)
-    .map((c) => ({ chantier: c, totals: budgetTotals(budgetOf(c.id)) }));
-const globalBudget = budgetTotals(
-    budgetByChantier.flatMap((b) => budgetOf(b.chantier.id)),
-);
-const taskAlerts = tasks
-    .map((t) => ({ task: t, health: taskHealth(t) }))
-    .filter((t) => ['late', 'risk', 'stale'].includes(t.health));
-const budgetAlerts = budgetByChantier.filter(
-    (b) => budgetLevel(b.totals.consumption) !== 'ok',
-);
-const chartLabels = budgetByChantier.map((b) => b.chantier.code);
-const chartSets = [
-    {
-        label: 'Budget révisé (M FCFA)',
-        data: budgetByChantier.map((b) =>
-            Math.round(b.totals.revised / 1_000_000),
-        ),
-    },
-    {
-        label: 'Engagé + réel (M FCFA)',
-        data: budgetByChantier.map((b) =>
-            Math.round((b.totals.committed + b.totals.actual) / 1_000_000),
-        ),
-    },
-];
-
-// --- Terrain : « mes » chantiers = les chantiers en cours (démo), mes demandes = récentes
-const myChantiers = activeChantiers.slice(0, 2);
-const myRequests = requests
-    .filter((r) => myChantiers.some((c) => c.id === r.chantierId))
-    .slice(0, 5);
-const myAlerts = taskAlerts.filter((t) =>
-    myChantiers.some((c) => c.id === t.task.chantierId),
-);
-
-// --- Achats
-const toProcess = requests.filter(
-    (r) =>
-        r.status === 'validee' &&
-        !orders.some((o) => o.requestNumbers.includes(r.number)),
-);
+// Achats : commandes, factures et stocks seront branchés avec la V2 (maquettes en attendant).
 const openOrders = orders.filter((o) => ['emis', 'partiel'].includes(o.status));
 const toControl = invoices.filter((i) =>
     ['a_controler', 'ecart'].includes(i.status),
 );
 const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
+
+const chartLabels = computed(
+    () => props.direction?.budget?.chart.map((b) => b.code) ?? [],
+);
+const chartSets = computed(() => [
+    {
+        label: 'Budget révisé (M FCFA)',
+        data:
+            props.direction?.budget?.chart.map((b) =>
+                Math.round(b.revised / 1_000_000),
+            ) ?? [],
+    },
+    {
+        label: 'Engagé + réel (M FCFA)',
+        data:
+            props.direction?.budget?.chart.map((b) =>
+                Math.round(b.consumed / 1_000_000),
+            ) ?? [],
+    },
+]);
+const alertCount = computed(
+    () =>
+        (props.direction?.taskAlerts.length ?? 0) +
+        (props.direction?.budget?.alerts.length ?? 0),
+);
 </script>
 
 <template>
@@ -144,7 +167,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
     <div class="space-y-6 p-4">
         <PageHeader
             :title="`Bonjour, ${user.name}`"
-            description="Vue d’ensemble de l’activité au 29/10/2026."
+            :description="`Vue d’ensemble de l’activité au ${dateFr(today)}.`"
         >
             <StatusBadge :label="variantLabel[variant]" tone="brand" />
             <Button v-if="hasArrivedToday" variant="outline" disabled>
@@ -168,15 +191,16 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
         </div>
 
         <!-- ================= TERRAIN ================= -->
-        <template v-if="variant === 'terrain'">
+        <template v-if="variant === 'terrain' && terrain">
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <Button
-                    v-if="can('chantiers.update')"
+                    v-if="can('chantiers.update') && terrain.primaryChantierId"
                     size="lg"
                     class="h-16 flex-col gap-1 bg-brand text-brand-foreground hover:bg-brand/90"
                     as-child
                 >
-                    <Link :href="`/chantiers/${myChantiers[0].id}/avancement`"
+                    <Link
+                        :href="`/chantiers/${terrain.primaryChantierId}/avancement`"
                         ><PenLine class="size-6" /> Avancement</Link
                     >
                 </Button>
@@ -192,13 +216,14 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     >
                 </Button>
                 <Button
-                    v-if="can('chantiers.update')"
+                    v-if="can('chantiers.update') && terrain.primaryChantierId"
                     size="lg"
                     variant="secondary"
                     class="h-16 flex-col gap-1"
                     as-child
                 >
-                    <Link :href="`/chantiers/${myChantiers[0].id}/rapport`"
+                    <Link
+                        :href="`/chantiers/${terrain.primaryChantierId}/rapport`"
                         ><ClipboardList class="size-6" /> Rapport du jour</Link
                     >
                 </Button>
@@ -219,7 +244,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                 <h2 class="font-display font-semibold">Mes chantiers</h2>
                 <div class="grid gap-3 md:grid-cols-2">
                     <Link
-                        v-for="c in myChantiers"
+                        v-for="c in terrain.chantiers"
                         :key="c.id"
                         :href="`/chantiers/${c.id}`"
                         class="rounded-xl border bg-card p-4 shadow-xs hover:bg-accent"
@@ -236,6 +261,12 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                         </p>
                     </Link>
                 </div>
+                <p
+                    v-if="!terrain.chantiers.length"
+                    class="text-sm text-muted-foreground"
+                >
+                    Aucun chantier ne vous est affecté.
+                </p>
             </section>
 
             <div class="grid gap-4 lg:grid-cols-2">
@@ -245,7 +276,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     </h2>
                     <ul class="divide-y text-sm">
                         <li
-                            v-for="r in myRequests"
+                            v-for="r in terrain.requests"
                             :key="r.id"
                             class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                         >
@@ -256,10 +287,16 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                                 <span class="font-medium">{{ r.number }}</span>
                                 <span
                                     class="block text-xs text-muted-foreground"
-                                    >{{ fcfa(requestTotal(r)) }}</span
+                                    >{{ fcfa(r.total) }}</span
                                 >
                             </Link>
                             <StatusBadge kind="request" :status="r.status" />
+                        </li>
+                        <li
+                            v-if="!terrain.requests.length"
+                            class="py-2.5 text-muted-foreground"
+                        >
+                            Aucune demande.
                         </li>
                     </ul>
                 </section>
@@ -272,19 +309,19 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     </h2>
                     <ul class="divide-y text-sm">
                         <li
-                            v-for="t in myAlerts"
-                            :key="t.task.id"
+                            v-for="t in terrain.alerts"
+                            :key="t.id"
                             class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                         >
                             <Link
-                                :href="`/chantiers/${t.task.chantierId}`"
+                                :href="`/chantiers/${t.chantierId}`"
                                 class="font-medium hover:underline"
-                                >{{ t.task.name }}</Link
+                                >{{ t.name }}</Link
                             >
                             <StatusBadge kind="task" :status="t.health" />
                         </li>
                         <li
-                            v-if="!myAlerts.length"
+                            v-if="!terrain.alerts.length"
                             class="py-2.5 text-muted-foreground"
                         >
                             Aucune alerte.
@@ -295,12 +332,12 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
         </template>
 
         <!-- ================= ACHATS ================= -->
-        <template v-else-if="variant === 'achats'">
+        <template v-else-if="variant === 'achats' && achats">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
                     label="Demandes à traiter"
-                    :value="String(toProcess.length)"
-                    hint="Validées, sans bon de commande"
+                    :value="String(achats.toProcess.length)"
+                    hint="Validées, à prendre en charge"
                     :icon="ClipboardCheck"
                     tone="warning"
                     href="/achats/demandes"
@@ -337,7 +374,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     </h2>
                     <ul class="divide-y text-sm">
                         <li
-                            v-for="r in toProcess"
+                            v-for="r in achats.toProcess"
                             :key="r.id"
                             class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                         >
@@ -348,11 +385,11 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                                 — {{ r.chantierName }}</Link
                             >
                             <span class="tabular-nums">{{
-                                fcfa(requestTotal(r))
+                                fcfa(r.total)
                             }}</span>
                         </li>
                         <li
-                            v-if="!toProcess.length"
+                            v-if="!achats.toProcess.length"
                             class="py-2.5 text-muted-foreground"
                         >
                             Rien à traiter.
@@ -383,44 +420,43 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
         </template>
 
         <!-- ================= DIRECTION ================= -->
-        <template v-else>
+        <template v-else-if="direction">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
+                    v-if="direction.projects"
                     label="Projets en cours"
-                    :value="
-                        String(
-                            projects.filter((p) => p.status === 'en_cours')
-                                .length,
-                        )
-                    "
-                    :hint="`${projects.length} projets au total`"
+                    :value="String(direction.projects.inProgress)"
+                    :hint="`${direction.projects.total} projets au total`"
                     :icon="FolderKanban"
                     tone="info"
                     href="/projets"
                 />
                 <KpiCard
+                    v-if="direction.chantiers"
                     label="Chantiers actifs"
-                    :value="String(activeChantiers.length)"
-                    :hint="`${chantiers.filter((c) => c.status === 'suspendu').length} suspendu`"
+                    :value="String(direction.chantiers.active)"
+                    :hint="`${direction.chantiers.suspended} suspendu(s)`"
                     :icon="HardHat"
                     tone="success"
                     href="/chantiers"
                 />
                 <KpiCard
+                    v-if="direction.pending"
                     label="Demandes à valider"
-                    :value="String(toValidate.length)"
-                    :hint="`${fcfaShort(toValidate.reduce((s, r) => s + requestTotal(r), 0))} à engager`"
+                    :value="String(direction.pending.count)"
+                    :hint="`${fcfaShort(direction.pending.amount)} à engager`"
                     :icon="ClipboardCheck"
                     tone="warning"
                     href="/achats/a-valider"
                 />
                 <KpiCard
+                    v-if="direction.budget"
                     label="Budget consommé"
-                    :value="percent(globalBudget.consumption, 1)"
-                    :hint="`${fcfaShort(globalBudget.remaining)} restant à engager`"
+                    :value="percent(direction.budget.global.consumption, 1)"
+                    :hint="`${fcfaShort(direction.budget.global.remaining)} restant à engager`"
                     :icon="Wallet"
                     :tone="
-                        budgetLevel(globalBudget.consumption) === 'ok'
+                        direction.budget.global.level === 'ok'
                             ? 'success'
                             : 'warning'
                     "
@@ -430,6 +466,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
 
             <div class="grid gap-4 lg:grid-cols-3">
                 <section
+                    v-if="direction.budget"
                     class="rounded-xl border bg-card p-4 shadow-xs lg:col-span-2"
                 >
                     <h2 class="mb-3 font-display font-semibold">
@@ -452,7 +489,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     </div>
                     <ul class="space-y-3">
                         <li
-                            v-for="n in notifications.slice(0, 4)"
+                            v-for="n in direction.notifications"
                             :key="n.id"
                             class="text-sm"
                         >
@@ -465,6 +502,12 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                                 {{ n.body }}
                             </p>
                         </li>
+                        <li
+                            v-if="!direction.notifications.length"
+                            class="text-sm text-muted-foreground"
+                        >
+                            Vous êtes à jour.
+                        </li>
                     </ul>
                 </section>
             </div>
@@ -476,53 +519,50 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                     <AlertTriangle class="size-4 text-warning" /> Alertes
                     <span
                         class="rounded-full bg-muted px-2 text-xs tabular-nums"
-                        >{{ taskAlerts.length + budgetAlerts.length }}</span
+                        >{{ alertCount }}</span
                     >
                 </h2>
                 <ul class="divide-y">
                     <li
-                        v-for="b in budgetAlerts"
-                        :key="`b${b.chantier.id}`"
+                        v-for="b in direction.budget?.alerts ?? []"
+                        :key="`b${b.chantierId}`"
                         class="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
                     >
                         <Link
-                            :href="`/budget/${b.chantier.id}`"
+                            :href="`/budget/${b.chantierId}`"
                             class="font-medium hover:underline"
-                            >{{ b.chantier.name }} —
-                            {{ number(b.totals.consumption, 1) }} % du budget
-                            révisé</Link
+                            >{{ b.name }} — {{ number(b.consumption, 1) }} % du
+                            budget révisé</Link
                         >
-                        <StatusBadge
-                            kind="budget"
-                            :status="budgetLevel(b.totals.consumption)"
-                        />
+                        <StatusBadge kind="budget" :status="b.level" />
                     </li>
                     <li
-                        v-for="t in taskAlerts"
-                        :key="`t${t.task.id}`"
+                        v-for="t in direction.taskAlerts"
+                        :key="`t${t.id}`"
                         class="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
                     >
                         <Link
-                            :href="`/chantiers/${t.task.chantierId}`"
+                            :href="`/chantiers/${t.chantierId}`"
                             class="hover:underline"
                         >
-                            <span class="font-medium">{{ t.task.name }}</span>
+                            <span class="font-medium">{{ t.name }}</span>
                             <span class="text-muted-foreground">
-                                —
-                                {{
-                                    chantiers.find(
-                                        (c) => c.id === t.task.chantierId,
-                                    )?.name
-                                }}</span
+                                — {{ t.chantierName }}</span
                             >
                         </Link>
                         <StatusBadge kind="task" :status="t.health" />
+                    </li>
+                    <li
+                        v-if="!alertCount"
+                        class="py-2.5 text-sm text-muted-foreground"
+                    >
+                        Aucune alerte.
                     </li>
                 </ul>
             </section>
 
             <section
-                v-if="can('achats.validate')"
+                v-if="direction.pending && can('achats.validate')"
                 class="rounded-xl border bg-card p-4 shadow-xs"
             >
                 <h2 class="mb-3 font-display font-semibold">
@@ -530,7 +570,7 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                 </h2>
                 <ul class="divide-y">
                     <li
-                        v-for="r in toValidate"
+                        v-for="r in direction.pending.queue"
                         :key="r.id"
                         class="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
                     >
@@ -549,6 +589,12 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
                             label="Validation Direction"
                             tone="brand"
                         />
+                    </li>
+                    <li
+                        v-if="!direction.pending.queue.length"
+                        class="py-2.5 text-sm text-muted-foreground"
+                    >
+                        Aucune demande en attente.
                     </li>
                 </ul>
             </section>

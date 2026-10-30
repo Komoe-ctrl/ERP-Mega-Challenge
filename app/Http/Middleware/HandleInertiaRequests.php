@@ -46,6 +46,8 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
             ],
             'navigation' => ModuleNavigation::for($request->user()),
+            // Nombre de notifications non lues (pastille du menu), évalué à la demande.
+            'unreadNotifications' => fn (): int => $request->user()?->unreadNotifications()->count() ?? 0,
             // Sélecteur de profil de la démo : uniquement en environnement local.
             'demo' => app()->isLocal() ? [
                 'current' => $request->user()?->getRoleNames()->first(),

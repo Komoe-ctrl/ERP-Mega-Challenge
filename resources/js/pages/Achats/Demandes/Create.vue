@@ -3,6 +3,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { AlertTriangle, Plus, Trash2 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import MissingArticleReportController from '@/actions/App/Http/Controllers/Achats/MissingArticleReportController';
+import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/PurchaseRequestController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import { Button } from '@/components/ui/button';
@@ -10,20 +12,34 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { addDays, fcfa, number, TODAY } from '@/lib/format';
 import { consumptionTone } from '@/lib/status';
-import {
-    articleById,
-    articles,
-    budgetOf,
-    budgetTotals,
-    categories,
-    DIRECTION_THRESHOLD,
-    requests,
-} from '@/mocks/achats';
-import { chantiers } from '@/mocks/chantiers';
-import type { Urgency } from '@/types/erp';
+import type { PurchaseRequest, Urgency } from '@/types/erp';
 
-/** `id` : correction d'une demande renvoyée (ou reprise d'un brouillon). */
-const props = defineProps<{ id?: number }>();
+type ArticleOption = {
+    id: number;
+    label: string;
+    category: string;
+    unit: string;
+    price: number;
+};
+type BudgetInfo = {
+    revised: number;
+    committed: number;
+    actual: number;
+    remaining: number;
+    consumption: number;
+    lines: { id: number; post: string; nature: string; remaining: number }[];
+};
+
+/** `request` : correction d'une demande renvoyée (ou reprise d'un brouillon). */
+const props = defineProps<{
+    request: PurchaseRequest | null;
+    presetChantier: number | null;
+    chantiers: { id: number; code: string; name: string }[];
+    budgets: Record<number, BudgetInfo>;
+    articles: ArticleOption[];
+    categories: string[];
+    threshold: number;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Achats', href: '/achats/demandes' }] },
@@ -46,22 +62,26 @@ const newLine = (): FormLine => ({
     urgency: 'normale',
 });
 
-const existing = computed(() => requests.find((r) => r.id === props.id));
-const title = computed(() =>
-    existing.value
-        ? `Corriger ${existing.value.number}`
-        : 'Nouvelle demande d’achat',
-);
+const existing = props.request;
+const title = existing
+    ? `Corriger ${existing.number}`
+    : 'Nouvelle demande d’achat';
 
-const chantierId = ref<number | null>(existing.value?.chantierId ?? 1);
-const justification = ref(existing.value?.justification ?? '');
+const chantierId = ref<number | null>(
+    existing?.chantierId ??
+        props.presetChantier ??
+        props.chantiers[0]?.id ??
+        null,
+);
+const budgetLineId = ref<number | null>(existing?.budgetLineId ?? null);
+const justification = ref(existing?.justification ?? '');
 const lines = reactive<FormLine[]>(
-    existing.value
-        ? existing.value.lines.map((l) => ({
+    existing
+        ? existing.lines.map((l) => ({
               key: nextKey++,
               articleId: l.articleId,
               quantity: l.quantity,
-              needDate: l.needDate,
+              needDate: l.needDate < TODAY ? TODAY : l.needDate,
               urgency: l.urgency,
           }))
         : [newLine()],
@@ -69,27 +89,33 @@ const lines = reactive<FormLine[]>(
 const missingOpen = ref(false);
 const attempted = ref(false);
 
+const articleById = (id: number | null) =>
+    props.articles.find((a) => a.id === id);
+
 // RG8.2 : le prix vient obligatoirement du référentiel, jamais saisi.
-const priceOf = (l: FormLine) =>
-    l.articleId ? (articleById(l.articleId)?.price ?? 0) : 0;
+const priceOf = (l: FormLine) => articleById(l.articleId)?.price ?? 0;
 const lineTotal = (l: FormLine) => priceOf(l) * (l.quantity || 0);
 const total = computed(() => lines.reduce((s, l) => s + lineTotal(l), 0));
 
 // RG8.3 : budget disponible du chantier affiché pendant la saisie, en direct.
-const totals = computed(() => budgetTotals(budgetOf(chantierId.value ?? 0)));
-const hasBudget = computed(() => totals.value.revised > 0);
-const availableAfter = computed(() => totals.value.remaining - total.value);
+const budget = computed<BudgetInfo | null>(
+    () => props.budgets[chantierId.value ?? 0] ?? null,
+);
+const hasBudget = computed(() => (budget.value?.revised ?? 0) > 0);
+const remaining = computed(() => budget.value?.remaining ?? 0);
+const availableAfter = computed(() => remaining.value - total.value);
 const consumptionAfter = computed(() =>
-    totals.value.revised
-        ? ((totals.value.committed + totals.value.actual + total.value) /
-              totals.value.revised) *
+    budget.value && budget.value.revised
+        ? ((budget.value.committed + budget.value.actual + total.value) /
+              budget.value.revised) *
           100
         : 0,
 );
 const overBudget = computed(() => hasBudget.value && availableAfter.value < 0);
+// RG8.7 : indication seulement, le serveur décide du circuit de validation.
 const needsDirection = computed(
-    () => overBudget.value || total.value > DIRECTION_THRESHOLD,
-); // RG8.7
+    () => overBudget.value || total.value > props.threshold,
+);
 
 // Validation en français, affichée sous les champs après une tentative d'envoi.
 const lineErrors = (l: FormLine) => ({
@@ -112,6 +138,7 @@ const valid = computed(
         lines.every((l) => Object.values(lineErrors(l)).every((e) => !e)),
 );
 
+// Le serveur refait toute la validation ; aucun prix n'est envoyé (RG8.2).
 function save(submit: boolean) {
     attempted.value = true;
 
@@ -121,19 +148,46 @@ function save(submit: boolean) {
         return;
     }
 
-    toast.success(
-        submit
-            ? needsDirection.value
-                ? 'Demande soumise : validation de la Direction requise (maquette).'
-                : 'Demande soumise au valideur (maquette).'
-            : 'Brouillon enregistré (maquette).',
-    );
-    router.visit('/achats/demandes');
+    const payload = {
+        chantier_id: chantierId.value,
+        budget_line_id: budgetLineId.value,
+        justification: justification.value,
+        submit,
+        lines: lines.map((l) => ({
+            article_id: l.articleId,
+            quantity: l.quantity,
+            need_date: l.needDate,
+            urgency: l.urgency,
+        })),
+    };
+    const options = {
+        onError: (errors: Record<string, string>) =>
+            toast.error(Object.values(errors)[0]),
+    };
+
+    if (existing) {
+        router.put(
+            PurchaseRequestController.update.url(existing.id),
+            payload as never,
+            options,
+        );
+    } else {
+        router.post(
+            PurchaseRequestController.store.url(),
+            payload as never,
+            options,
+        );
+    }
 }
 
 function reportMissing(label: string) {
-    toast.success(
-        `Demande d’ajout transmise au Service Achats BTP : « ${label} » (maquette).`,
+    router.post(
+        MissingArticleReportController.store.url(),
+        { label, chantier_id: chantierId.value },
+        {
+            preserveScroll: true,
+            onError: (errors) => toast.error(Object.values(errors)[0]),
+        },
     );
 }
 
@@ -165,14 +219,18 @@ const field =
             <div class="grid gap-2">
                 <Label for="chantier">Chantier</Label>
                 <select id="chantier" v-model="chantierId" :class="field">
-                    <option
-                        v-for="c in chantiers.filter(
-                            (x) => x.status !== 'cloture',
-                        )"
-                        :key="c.id"
-                        :value="c.id"
-                    >
+                    <option v-for="c in chantiers" :key="c.id" :value="c.id">
                         {{ c.code }} — {{ c.name }}
+                    </option>
+                </select>
+            </div>
+
+            <div v-if="budget && budget.lines.length" class="grid gap-2">
+                <Label for="poste">Poste du déboursé sec</Label>
+                <select id="poste" v-model="budgetLineId" :class="field">
+                    <option :value="null">Automatique (matériaux)</option>
+                    <option v-for="l in budget.lines" :key="l.id" :value="l.id">
+                        {{ l.post }} — reste {{ fcfa(l.remaining) }}
                     </option>
                 </select>
             </div>
@@ -193,7 +251,7 @@ const field =
                     >
                 </div>
                 <p class="mb-2 text-xs text-muted-foreground">
-                    Avant cette demande : {{ fcfa(totals.remaining) }}
+                    Avant cette demande : {{ fcfa(remaining) }}
                 </p>
                 <ProgressBar
                     :value="consumptionAfter"
@@ -239,7 +297,7 @@ const field =
                     <optgroup v-for="cat in categories" :key="cat" :label="cat">
                         <option
                             v-for="a in articles.filter(
-                                (x) => x.category === cat && x.active,
+                                (x) => x.category === cat,
                             )"
                             :key="a.id"
                             :value="a.id"
@@ -369,8 +427,8 @@ const field =
                         la Direction requise.</span
                     >
                     <span v-else
-                        >Montant supérieur à {{ fcfa(DIRECTION_THRESHOLD) }} :
-                        validation de la Direction requise.</span
+                        >Montant supérieur à {{ fcfa(threshold) }} : validation
+                        de la Direction requise.</span
                     >
                 </p>
                 <div class="flex flex-wrap items-center gap-2">

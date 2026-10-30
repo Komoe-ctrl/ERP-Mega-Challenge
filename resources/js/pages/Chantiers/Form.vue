@@ -1,62 +1,52 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, router } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
+import ChantierController from '@/actions/App/Http/Controllers/Chantiers/ChantierController';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SchemaForm from '@/components/erp/SchemaForm.vue';
 import { statuses } from '@/lib/status';
-import { chantiers, projects } from '@/mocks/chantiers';
+import type { Chantier } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id?: number }>();
+type Option = { value: string; label: string };
+
+const props = defineProps<{
+    chantier: (Chantier & { conducteurId: number; chefId: number }) | null;
+    presetProject: number | null;
+    projects: Option[];
+    conducteurs: Option[];
+    chefs: Option[];
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
 
-const page = usePage();
-const existing = computed(() => chantiers.find((c) => c.id === props.id));
-const title = computed(() =>
-    existing.value ? 'Modifier le chantier' : 'Nouveau chantier',
-);
-
-// Création depuis la fiche d'un projet : /chantiers/creer?projet=1
-const presetProject =
-    Number(new URLSearchParams(page.url.split('?')[1] ?? '').get('projet')) ||
-    null;
-
-const people = (role: string) => [
-    ...new Set(
-        chantiers.map((c) => (role === 'manager' ? c.manager : c.foreman)),
-    ),
-];
+const title = props.chantier ? 'Modifier le chantier' : 'Nouveau chantier';
 
 const fields: FieldDef[] = [
     {
         name: 'code',
         label: 'Code',
         required: true,
-        pattern: /^CH-\d{3}$/,
+        pattern: /^CH-\d{3,4}$/,
         patternMessage: 'Format attendu : CH-001.',
         hint: 'Code unique, au format CH-001.',
-        validate: (value) =>
-            chantiers.some(
-                (c) => c.code === value && c.id !== existing.value?.id,
-            )
-                ? 'Ce code est déjà utilisé (RG7.1).'
-                : null,
     },
     { name: 'name', label: 'Nom du chantier', required: true, minLength: 3 },
-    {
-        name: 'projectId',
-        label: 'Projet',
-        type: 'select',
-        required: true,
-        options: projects
-            .filter((p) => p.status !== 'abandonne' && p.status !== 'cloture')
-            .map((p) => ({ value: p.id, label: p.name })),
-        wide: true,
-    },
+    // Le projet se choisit à la création et ne change plus ensuite.
+    ...(props.chantier
+        ? []
+        : [
+              {
+                  name: 'project_id',
+                  label: 'Projet',
+                  type: 'select',
+                  required: true,
+                  options: props.projects,
+                  wide: true,
+              } satisfies FieldDef,
+          ]),
     { name: 'location', label: 'Localisation', required: true },
     {
         name: 'status',
@@ -68,62 +58,64 @@ const fields: FieldDef[] = [
             label: m.label,
         })),
     },
-    { name: 'startDate', label: 'Début', type: 'date', required: true },
+    { name: 'start_date', label: 'Début', type: 'date', required: true },
     {
-        name: 'endDate',
+        name: 'end_date',
         label: 'Fin prévue',
         type: 'date',
         required: true,
         validate: (value, values) =>
-            values.startDate &&
+            values.start_date &&
             value &&
-            String(value) < String(values.startDate)
+            String(value) < String(values.start_date)
                 ? 'La fin doit être postérieure au début.'
                 : null,
     },
     {
-        name: 'manager',
+        name: 'conducteur_id',
         label: 'Conducteur de travaux',
         type: 'select',
         required: true,
-        options: people('manager').map((m) => ({ value: m, label: m })),
+        options: props.conducteurs,
     },
     {
-        name: 'foreman',
+        name: 'chef_id',
         label: 'Chef de chantier',
         type: 'select',
         required: true,
-        options: people('foreman').map((m) => ({ value: m, label: m })),
-    },
-    {
-        name: 'budget',
-        label: 'Budget initial (déboursé sec)',
-        type: 'number',
-        min: 0,
-        step: 1,
-        unit: 'FCFA',
-        hint: 'Détaillé ensuite par poste dans le module Budget.',
+        options: props.chefs,
+        hint: 'Le budget (déboursé sec) se détaille ensuite par poste dans le module Budget.',
     },
 ];
 
 const initial: FieldValues = {
-    code: existing.value?.code ?? '',
-    name: existing.value?.name ?? '',
-    projectId: existing.value?.projectId ?? presetProject ?? '',
-    location: existing.value?.location ?? '',
-    status: existing.value?.status ?? 'preparation',
-    startDate: existing.value?.startDate ?? '',
-    endDate: existing.value?.endDate ?? '',
-    manager: existing.value?.manager ?? '',
-    foreman: existing.value?.foreman ?? '',
-    budget: null,
+    code: props.chantier?.code ?? '',
+    name: props.chantier?.name ?? '',
+    project_id: props.presetProject ? String(props.presetProject) : '',
+    location: props.chantier?.location ?? '',
+    status: props.chantier?.status ?? 'preparation',
+    start_date: props.chantier?.startDate ?? '',
+    end_date: props.chantier?.endDate ?? '',
+    conducteur_id: props.chantier ? String(props.chantier.conducteurId) : '',
+    chef_id: props.chantier ? String(props.chantier.chefId) : '',
 };
 
-function submit() {
-    toast.success(
-        'Chantier enregistré (maquette : aucune donnée n’est sauvegardée).',
-    );
-    router.visit('/chantiers');
+// Le serveur refait toute la validation ; ses messages reviennent en notification.
+function submit(values: FieldValues) {
+    const options = {
+        onError: (errors: Record<string, string>) =>
+            toast.error(Object.values(errors)[0]),
+    };
+
+    if (props.chantier) {
+        router.put(
+            ChantierController.update.url(props.chantier.id),
+            values as never,
+            options,
+        );
+    } else {
+        router.post(ChantierController.store.url(), values as never, options);
+    }
 }
 </script>
 
@@ -140,7 +132,7 @@ function submit() {
                 :fields="fields"
                 :initial="initial"
                 @submit="submit"
-                @cancel="router.visit('/chantiers')"
+                @cancel="router.visit(ChantierController.index.url())"
             />
         </div>
     </div>

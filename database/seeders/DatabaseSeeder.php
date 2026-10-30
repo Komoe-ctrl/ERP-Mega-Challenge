@@ -21,5 +21,15 @@ class DatabaseSeeder extends Seeder
             FiscalYearSeeder::class,
             AdminUserSeeder::class,
         ]);
+
+        if (config('erp.seed_demo_users') === true) {
+            $this->call(DemoUsersSeeder::class);
+            $this->call(ProjectsSeeder::class);
+            $this->call(ChantiersSeeder::class);
+            $this->call(ArticlesSeeder::class);
+            $this->call(BudgetSeeder::class);
+            $this->call(PurchaseRequestsSeeder::class);
+            $this->call(SuppliersSeeder::class);
+        }
     }
 }

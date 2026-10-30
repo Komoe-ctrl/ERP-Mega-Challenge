@@ -17,13 +17,12 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { moduleIcon } from '@/lib/moduleIcons';
-import { notifications } from '@/mocks/transverse';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
 
-const unread = notifications.filter((n) => !n.read).length;
+const unread = computed(() => page.props.unreadNotifications);
 
 // Le menu est construit côté serveur selon les droits de l'utilisateur
 // (module activé + permission `<module>.view`) : un module sans droit n'apparaît pas.
@@ -37,7 +36,7 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: 'Notifications',
         href: '/notifications',
         icon: Bell,
-        badge: unread,
+        badge: unread.value,
     },
     ...page.props.navigation.map((module) => ({
         title: module.title,

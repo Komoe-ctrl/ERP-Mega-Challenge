@@ -169,11 +169,13 @@ const legend: TaskHealth[] = [
                             v-else
                             class="absolute top-1/2 h-5 -translate-y-1/2 overflow-hidden rounded-md bg-muted"
                             :style="bar(task)"
-                            :title="`${task.name} — ${task.progress} % (théorique ${theoreticalProgress(task)} %)`"
+                            :title="`${task.name} — ${task.progress} % (théorique ${task.theoretical ?? theoreticalProgress(task)} %)`"
                         >
                             <div
                                 class="h-full"
-                                :class="barTone[taskHealth(task)]"
+                                :class="
+                                    barTone[task.health ?? taskHealth(task)]
+                                "
                                 :style="{ width: `${task.progress}%` }"
                             />
                             <span

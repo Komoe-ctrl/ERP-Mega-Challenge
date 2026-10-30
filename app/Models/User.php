@@ -43,6 +43,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property int|null $service_id
  * @property string|null $phone
  * @property bool $is_active
+ * @property bool $notify_app
+ * @property bool $notify_email
  * @property CarbonInterface|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -75,6 +77,8 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'notify_app' => 'boolean',
+            'notify_email' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }

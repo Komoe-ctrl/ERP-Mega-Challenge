@@ -1,25 +1,26 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { computed } from 'vue';
 import { toast } from 'vue-sonner';
+import ProjectController from '@/actions/App/Http/Controllers/Projets/ProjectController';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SchemaForm from '@/components/erp/SchemaForm.vue';
-import { projects } from '@/mocks/chantiers';
-import { clients } from '@/mocks/v3';
+import type { Project } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id?: number }>();
+type Option = { value: string; label: string };
+
+const props = defineProps<{
+    project: Project | null;
+    clients: Option[];
+    managers: Option[];
+    agencies: Option[];
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Projets', href: '/projets' }] },
 });
 
-const existing = computed(() => projects.find((p) => p.id === props.id));
-const title = computed(() =>
-    existing.value ? 'Modifier le projet' : 'Nouveau projet',
-);
-
-const managers = [...new Set(projects.map((p) => p.manager))];
+const title = props.project ? 'Modifier le projet' : 'Nouveau projet';
 
 const fields: FieldDef[] = [
     {
@@ -30,29 +31,26 @@ const fields: FieldDef[] = [
         wide: true,
     },
     {
-        name: 'client',
+        name: 'client_id',
         label: 'Client',
         type: 'select',
         required: true,
-        options: clients.map((c) => ({ value: c.name, label: c.name })),
+        options: props.clients,
     },
     { name: 'location', label: 'Localisation', required: true },
     {
-        name: 'manager',
+        name: 'manager_id',
         label: 'Responsable',
         type: 'select',
         required: true,
-        options: managers.map((m) => ({ value: m, label: m })),
+        options: props.managers,
     },
     {
-        name: 'agency',
+        name: 'agency_id',
         label: 'Agence',
         type: 'select',
         required: true,
-        options: [
-            { value: 'Siège Abidjan', label: 'Siège Abidjan' },
-            { value: 'Agence Bouaké', label: 'Agence Bouaké' },
-        ],
+        options: props.agencies,
     },
     {
         name: 'budget',
@@ -64,37 +62,48 @@ const fields: FieldDef[] = [
         unit: 'FCFA',
         hint: 'Montant entier en FCFA, sans décimales.',
     },
-    { name: 'startDate', label: 'Début', type: 'date', required: true },
+    { name: 'start_date', label: 'Début', type: 'date', required: true },
     {
-        name: 'endDate',
+        name: 'end_date',
         label: 'Fin prévue',
         type: 'date',
         required: true,
         validate: (value, values) =>
-            values.startDate &&
+            values.start_date &&
             value &&
-            String(value) < String(values.startDate)
+            String(value) < String(values.start_date)
                 ? 'La fin doit être postérieure au début.'
                 : null,
     },
 ];
 
 const initial: FieldValues = {
-    name: existing.value?.name ?? '',
-    client: existing.value?.clientName ?? '',
-    location: existing.value?.location ?? '',
-    manager: existing.value?.manager ?? '',
-    agency: existing.value?.agency ?? 'Siège Abidjan',
-    budget: existing.value?.budget ?? null,
-    startDate: existing.value?.startDate ?? '',
-    endDate: existing.value?.endDate ?? '',
+    name: props.project?.name ?? '',
+    client_id: props.project ? String(props.project.clientId) : '',
+    location: props.project?.location ?? '',
+    manager_id: props.project ? String(props.project.managerId) : '',
+    agency_id: props.project ? String(props.project.agencyId) : '',
+    budget: props.project?.budget ?? null,
+    start_date: props.project?.startDate ?? '',
+    end_date: props.project?.endDate ?? '',
 };
 
-function submit() {
-    toast.success(
-        'Projet enregistré (maquette : aucune donnée n’est sauvegardée).',
-    );
-    router.visit('/projets');
+// Le serveur refait toute la validation ; ses messages reviennent en notification.
+function submit(values: FieldValues) {
+    const options = {
+        onError: (errors: Record<string, string>) =>
+            toast.error(Object.values(errors)[0]),
+    };
+
+    if (props.project) {
+        router.put(
+            ProjectController.update.url(props.project.id),
+            values as never,
+            options,
+        );
+    } else {
+        router.post(ProjectController.store.url(), values as never, options);
+    }
 }
 </script>
 
@@ -111,7 +120,7 @@ function submit() {
                 :fields="fields"
                 :initial="initial"
                 @submit="submit"
-                @cancel="router.visit('/projets')"
+                @cancel="router.visit(ProjectController.index.url())"
             />
         </div>
     </div>

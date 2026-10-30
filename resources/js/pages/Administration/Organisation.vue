@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
 import { computed, h, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import OrganizationController from '@/actions/App/Http/Controllers/Administration/OrganizationController';
 import DataTable from '@/components/DataTable.vue';
 import AdminNav from '@/components/erp/AdminNav.vue';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
@@ -13,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { toneBadgeCell } from '@/lib/cells';
 import type { DataTableColumn } from '@/lib/dataTable';
-import { agencies, services, sites } from '@/mocks/transverse';
 import type { Agency, Service, SiteRecord } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
@@ -31,10 +31,18 @@ const canEdit = computed(() => can('administration.update'));
 const tab = ref('agences');
 const createOpen = ref(false);
 
-// Listes locales : les créations de la session s'ajoutent aux données fictives.
-const agencyRows = ref<Agency[]>(agencies.map((a) => ({ ...a })));
-const serviceRows = ref<Service[]>(services.map((s) => ({ ...s })));
-const siteRows = ref<SiteRecord[]>(sites.map((s) => ({ ...s })));
+type SiteRow = SiteRecord & { agencyId: number };
+
+const props = defineProps<{
+    agencies: Agency[];
+    services: Service[];
+    sites: SiteRow[];
+}>();
+
+// Les listes viennent du serveur ; chaque écriture recharge la page.
+const agencyRows = computed(() => props.agencies);
+const serviceRows = computed(() => props.services);
+const siteRows = computed(() => props.sites);
 
 const siteTypes = {
     bureau: 'Bureau',
@@ -88,10 +96,12 @@ const fieldsByTab = computed<Record<string, FieldDef[]>>(() => ({
             label: 'Agence',
             type: 'select',
             required: true,
-            options: agencyRows.value.map((a) => ({
-                value: a.name,
-                label: a.name,
-            })),
+            options: agencyRows.value
+                .filter((a) => a.active)
+                .map((a) => ({
+                    value: String(a.id),
+                    label: a.name,
+                })),
         },
         {
             name: 'type',
@@ -106,52 +116,60 @@ const fieldsByTab = computed<Record<string, FieldDef[]>>(() => ({
     ],
 }));
 
+type Kind = 'agences' | 'services' | 'sites';
+
+const routes = {
+    agences: {
+        store: () => OrganizationController.storeAgency.url(),
+        deactivate: (id: number) =>
+            OrganizationController.deactivateAgency.url(id),
+        reactivate: (id: number) =>
+            OrganizationController.reactivateAgency.url(id),
+    },
+    services: {
+        store: () => OrganizationController.storeService.url(),
+        deactivate: (id: number) =>
+            OrganizationController.deactivateService.url(id),
+        reactivate: (id: number) =>
+            OrganizationController.reactivateService.url(id),
+    },
+    sites: {
+        store: () => OrganizationController.storeSite.url(),
+        deactivate: (id: number) =>
+            OrganizationController.deactivateSite.url(id),
+        reactivate: (id: number) =>
+            OrganizationController.reactivateSite.url(id),
+    },
+} as const;
+
 const labels: Record<string, string> = {
     agences: 'agence',
     services: 'service',
     sites: 'site',
 };
 
+// La validation est refaite côté serveur ; les erreurs reviennent par Inertia.
 function create(v: FieldValues) {
-    const code = String(v.code).toUpperCase();
-    const id = Date.now();
+    const payload: Record<string, unknown> = {
+        code: String(v.code).toUpperCase(),
+        name: v.name,
+    };
 
     if (tab.value === 'agences') {
-        agencyRows.value.push({
-            id,
-            code,
-            name: String(v.name),
-            city: String(v.city),
-            active: true,
-        });
-    } else if (tab.value === 'services') {
-        serviceRows.value.push({
-            id,
-            code,
-            name: String(v.name),
-            users: 0,
-            active: true,
-        });
-    } else {
-        siteRows.value.push({
-            id,
-            code,
-            name: String(v.name),
-            agency: String(v.agency),
-            type: v.type as SiteRecord['type'],
-            active: true,
-        });
+        payload.city = v.city;
+    } else if (tab.value === 'sites') {
+        payload.agency_id = v.agency;
+        payload.type = v.type;
     }
 
-    toast.success(
-        `${labels[tab.value][0].toUpperCase()}${labels[tab.value].slice(1)} créé(e) (maquette).`,
-    );
+    router.post(routes[tab.value as Kind].store(), payload as never, {
+        preserveScroll: true,
+        onError: (errors) => toast.error(Object.values(errors)[0]),
+    });
 }
 
 // Désactivation avec motif ; on ne supprime jamais (historique conservé).
-const toggling = ref<{ rows: { active: boolean }[]; index: number } | null>(
-    null,
-);
+const toggling = ref<{ kind: Kind; id: number } | null>(null);
 const toggleOpen = computed({
     get: () => toggling.value !== null,
     set: (v) => {
@@ -159,34 +177,33 @@ const toggleOpen = computed({
     },
 });
 
-function askToggle(rows: { active: boolean }[], index: number) {
-    if (rows[index].active) {
-        toggling.value = { rows, index };
+function askToggle(kind: Kind, row: { id: number; active: boolean }) {
+    if (row.active) {
+        toggling.value = { kind, id: row.id };
     } else {
-        rows[index].active = true;
-        toast.success('Élément réactivé (maquette).');
+        router.patch(
+            routes[kind].reactivate(row.id),
+            {},
+            { preserveScroll: true },
+        );
     }
 }
 
 function confirmToggle(reason: string) {
     if (toggling.value) {
-        toggling.value.rows[toggling.value.index].active = false;
-        toast.success(`Désactivé — motif : ${reason}`);
+        router.patch(
+            routes[toggling.value.kind].deactivate(toggling.value.id),
+            { reason },
+            { preserveScroll: true },
+        );
     }
 }
 
-const stateCell = (
-    rows: () => { active: boolean }[],
-    rowId: number,
-    ids: () => number[],
-) => {
-    const index = ids().indexOf(rowId);
-    const active = rows()[index]?.active;
-
-    return h('div', { class: 'flex items-center gap-2' }, [
+const stateCell = (kind: Kind, row: { id: number; active: boolean }) =>
+    h('div', { class: 'flex items-center gap-2' }, [
         toneBadgeCell(
-            active ? 'Actif' : 'Désactivé',
-            active ? 'success' : 'neutral',
+            row.active ? 'Actif' : 'Désactivé',
+            row.active ? 'success' : 'neutral',
         ),
         canEdit.value
             ? h(
@@ -194,13 +211,12 @@ const stateCell = (
                   {
                       size: 'sm',
                       variant: 'ghost',
-                      onClick: () => askToggle(rows(), index),
+                      onClick: () => askToggle(kind, row),
                   },
-                  () => (active ? 'Désactiver' : 'Réactiver'),
+                  () => (row.active ? 'Désactiver' : 'Réactiver'),
               )
             : null,
     ]);
-};
 
 const agencyCols: DataTableColumn<Agency>[] = [
     { accessorKey: 'code', header: 'Code' },
@@ -209,12 +225,7 @@ const agencyCols: DataTableColumn<Agency>[] = [
     {
         accessorKey: 'active',
         header: 'État',
-        cell: ({ row }) =>
-            stateCell(
-                () => agencyRows.value,
-                row.original.id,
-                () => agencyRows.value.map((a) => a.id),
-            ),
+        cell: ({ row }) => stateCell('agences', row.original),
     },
 ];
 const serviceCols: DataTableColumn<Service>[] = [
@@ -224,12 +235,7 @@ const serviceCols: DataTableColumn<Service>[] = [
     {
         accessorKey: 'active',
         header: 'État',
-        cell: ({ row }) =>
-            stateCell(
-                () => serviceRows.value,
-                row.original.id,
-                () => serviceRows.value.map((s) => s.id),
-            ),
+        cell: ({ row }) => stateCell('services', row.original),
     },
 ];
 const siteCols: DataTableColumn<SiteRecord>[] = [
@@ -244,12 +250,7 @@ const siteCols: DataTableColumn<SiteRecord>[] = [
     {
         accessorKey: 'active',
         header: 'État',
-        cell: ({ row }) =>
-            stateCell(
-                () => siteRows.value,
-                row.original.id,
-                () => siteRows.value.map((s) => s.id),
-            ),
+        cell: ({ row }) => stateCell('sites', row.original),
     },
 ];
 </script>

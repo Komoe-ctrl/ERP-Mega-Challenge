@@ -25,14 +25,17 @@ export type Project = {
     clientId: Id | null;
     clientName: string;
     location: string;
+    managerId?: Id;
     manager: string;
+    agencyId?: Id;
     agency: string;
     budget: number;
     startDate: string;
     endDate: string;
     status: ProjectStatus;
-    abandonReason?: string;
-    documents: { name: string; size: string; date: string }[];
+    abandonReason?: string | null;
+    /** Présents sur la fiche du projet uniquement. */
+    documents?: { name: string; size: string; date: string }[];
 };
 
 /* ---------- Chantiers (M7) ---------- */
@@ -68,7 +71,10 @@ export type Task = {
     weight: number; // pondération pour l'avancement global
     milestone?: boolean;
     lastUpdate: string;
-    comment?: string;
+    comment?: string | null;
+    /** Calculés par le serveur (RG7.5 à RG7.7), jamais par l'écran. */
+    theoretical?: number;
+    health?: TaskHealth;
 };
 
 export type DailyReport = {
@@ -100,7 +106,7 @@ export type Article = {
     price: number;
     active: boolean;
     updatedAt: string;
-    history: { date: string; price: number; by: string; reason: string }[];
+    history?: { date: string; price: number; by: string; reason: string }[];
 };
 
 export type RequestLine = {
@@ -108,7 +114,11 @@ export type RequestLine = {
     articleId: Id;
     quantity: number;
     /** Quantité ajustée par le valideur (RG8.5), l'écart est tracé. */
-    adjustedQuantity?: number;
+    adjustedQuantity?: number | null;
+    /** Fournis par le serveur : libellé, unité et prix unitaire (figé après validation). */
+    articleLabel?: string;
+    unit?: string;
+    unitPrice?: number;
     needDate: string;
     urgency: Urgency;
 };
@@ -117,7 +127,7 @@ export type RequestEvent = {
     date: string;
     actor: string;
     action: string;
-    reason?: string;
+    reason?: string | null;
 };
 
 export type PurchaseRequest = {
@@ -126,6 +136,11 @@ export type PurchaseRequest = {
     chantierId: Id;
     chantierName: string;
     requester: string;
+    requesterId?: Id;
+    budgetLineId?: Id | null;
+    /** Montant courant calculé par le serveur. */
+    total?: number;
+    frozen?: boolean;
     createdAt: string;
     status: RequestStatus;
     justification: string;
@@ -237,6 +252,9 @@ export type SettingGroup = {
 
 export type Supplier = {
     id: Id;
+    number?: string;
+    email?: string | null;
+    active?: boolean;
     name: string;
     categories: string[];
     contact: string;
@@ -342,7 +360,7 @@ export type StockMovement = {
     to: string;
     chantier?: string;
     author: string;
-    reason?: string;
+    reason?: string | null;
 };
 
 export type InventoryLine = {

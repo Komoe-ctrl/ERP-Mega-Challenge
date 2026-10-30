@@ -1,45 +1,78 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
-import FormDialog from '@/components/erp/FormDialog.vue';
-import { usePermissions } from '@/composables/usePermissions';
-import type { FieldDef, FieldValues } from '@/types/forms';
+import BudgetController from '@/actions/App/Http/Controllers/Budget/BudgetController';
 import BarChart from '@/components/charts/BarChart.vue';
+import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import EmptyState from '@/components/erp/EmptyState.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { dateFr, fcfa, number } from '@/lib/format';
 import { consumptionTone } from '@/lib/status';
-import {
-    budgetExpenses,
-    budgetLevel,
-    budgetOf,
-    budgetRevisions,
-    budgetTotals,
-} from '@/mocks/achats';
-import { chantiers } from '@/mocks/chantiers';
 import type { BudgetLine } from '@/types/erp';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+type Totals = {
+    initial: number;
+    revised: number;
+    committed: number;
+    actual: number;
+    remaining: number;
+    consumption: number;
+    level: 'ok' | 'warning' | 'critical';
+};
+type Revision = {
+    id: number;
+    date: string;
+    post: string;
+    amount: number;
+    reason: string;
+    author: string;
+    status: 'en_attente' | 'validee' | 'rejetee';
+    decidedBy: string | null;
+    decisionReason: string | null;
+    canDecide: boolean;
+};
+type Expense = {
+    id: number;
+    date: string;
+    label: string;
+    post: string;
+    amount: number;
+    receipt: string;
+    receiptUrl: string;
+    author: string;
+};
+
+const props = defineProps<{
+    chantier: { id: number; code: string; name: string };
+    lines: BudgetLine[];
+    totals: Totals;
+    revisions: Revision[];
+    expenses: Expense[];
+    canManage: boolean;
+    canExpense: boolean;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Budget', href: '/budget' }] },
 });
 
-const { can } = usePermissions();
-const chantier = computed(
-    () => chantiers.find((c) => c.id === props.id) ?? chantiers[0],
-);
-const lines = computed(() => budgetOf(chantier.value.id));
-const totals = computed(() => budgetTotals(lines.value));
-const level = computed(() => budgetLevel(totals.value.consumption));
-const revisions = computed(() =>
-    budgetRevisions.filter((r) => r.chantierId === chantier.value.id),
-);
 const lineConsumption = (l: BudgetLine) =>
     l.revised ? ((l.committed + l.actual) / l.revised) * 100 : 0;
 const natureLabel = {
@@ -47,36 +80,55 @@ const natureLabel = {
     main_oeuvre: 'Main-d’œuvre',
     materiel: 'Matériel',
 } as const;
+const revisionLabel = {
+    en_attente: 'En attente de validation',
+    validee: 'Validée',
+    rejetee: 'Rejetée',
+} as const;
 
 const postOptions = computed(() =>
-    lines.value.map((l) => ({ value: l.post, label: l.post })),
+    props.lines.map((l) => ({ value: String(l.id), label: l.post })),
 );
-const extraRevisions = ref<
-    {
-        date: string;
-        post: string;
-        amount: number;
-        reason: string;
-        author: string;
-        validatedBy: string;
-    }[]
->([]);
-const extraExpenses = ref<typeof budgetExpenses>([]);
-const expenses = computed(() =>
-    [...extraExpenses.value, ...budgetExpenses].filter(
-        (e) => e.chantierId === chantier.value.id,
-    ),
-);
-const allRevisions = computed(() => [
-    ...extraRevisions.value,
-    ...revisions.value,
-]);
+const lineOpen = ref(false);
 const revisionOpen = ref(false);
 const expenseOpen = ref(false);
+const rejecting = ref<number | null>(null);
+const rejectOpen = computed({
+    get: () => rejecting.value !== null,
+    set: (v) => {
+        if (!v) rejecting.value = null;
+    },
+});
 
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0]);
+
+const lineFields: FieldDef[] = [
+    { name: 'post', label: 'Poste', required: true, minLength: 3, wide: true },
+    {
+        name: 'nature',
+        label: 'Nature',
+        type: 'select',
+        required: true,
+        options: Object.entries(natureLabel).map(([value, label]) => ({
+            value,
+            label,
+        })),
+    },
+    {
+        name: 'amount',
+        label: 'Budget initial',
+        type: 'number',
+        required: true,
+        min: 1,
+        step: 1,
+        unit: 'FCFA',
+        hint: 'Déboursé sec du poste. Il ne change ensuite que par révision validée.',
+    },
+];
 const revisionFields = computed<FieldDef[]>(() => [
     {
-        name: 'post',
+        name: 'budget_line_id',
         label: 'Poste',
         type: 'select',
         required: true,
@@ -87,9 +139,11 @@ const revisionFields = computed<FieldDef[]>(() => [
         label: 'Montant de la révision',
         type: 'number',
         required: true,
-        min: 1,
         step: 1,
         unit: 'FCFA',
+        hint: 'Positif pour augmenter le budget, négatif pour le diminuer.',
+        validate: (value) =>
+            Number(value) === 0 ? 'Le montant ne peut pas être nul.' : null,
     },
     {
         name: 'reason',
@@ -100,78 +154,73 @@ const revisionFields = computed<FieldDef[]>(() => [
         hint: 'Toute révision est historisée avec son motif, son auteur et sa validation (RG10.2).',
     },
 ]);
-const expenseFields = computed<FieldDef[]>(() => [
-    {
-        name: 'label',
-        label: 'Libellé',
-        required: true,
-        minLength: 3,
-        wide: true,
-    },
-    {
-        name: 'post',
-        label: 'Poste imputé',
-        type: 'select',
-        required: true,
-        options: postOptions.value,
-    },
-    {
-        name: 'amount',
-        label: 'Montant',
-        type: 'number',
-        required: true,
-        min: 1,
-        step: 1,
-        unit: 'FCFA',
-    },
-    {
-        name: 'receipt',
-        label: 'Justificatif',
-        type: 'file',
-        required: true,
-        wide: true,
-        hint: 'Facture, reçu ou ticket : obligatoire (RG10.4).',
-    },
-]);
 
-function addRevision(v: FieldValues) {
-    extraRevisions.value.unshift({
-        date: '2026-10-29',
-        post: String(v.post),
-        amount: Number(v.amount),
-        reason: String(v.reason),
-        author: 'Vous',
-        validatedBy: 'En attente de validation',
+function addLine(v: FieldValues) {
+    router.post(BudgetController.storeLine.url(props.chantier.id), v as never, {
+        preserveScroll: true,
+        onError,
     });
-    toast.success('Révision soumise à validation (maquette).');
 }
-function addExpense(v: FieldValues) {
-    extraExpenses.value.unshift({
-        id: Date.now(),
-        chantierId: chantier.value.id,
-        date: '2026-10-29',
-        label: String(v.label),
-        post: String(v.post),
-        amount: Number(v.amount),
-        receipt: String(v.receipt),
-        author: 'Vous',
-    });
-    toast.success('Dépense enregistrée et imputée au poste (maquette).');
+function requestRevision(v: FieldValues) {
+    router.post(
+        BudgetController.requestRevision.url(props.chantier.id),
+        v as never,
+        { preserveScroll: true, onError },
+    );
+}
+function validateRevision(id: number) {
+    router.post(
+        BudgetController.validateRevision.url(id),
+        {},
+        { preserveScroll: true, onError },
+    );
+}
+function rejectRevision(reason: string) {
+    if (rejecting.value !== null) {
+        router.post(
+            BudgetController.rejectRevision.url(rejecting.value),
+            { reason },
+            { preserveScroll: true, onError },
+        );
+    }
 }
 
-const chartLabels = computed(() => lines.value.map((l) => l.post));
+// RG10.4 : dépense diverse avec justificatif obligatoire (envoi de fichier).
+const expense = useForm({
+    label: '',
+    budget_line_id: '',
+    amount: '' as string | number,
+    receipt: null as File | null,
+});
+
+function submitExpense() {
+    expense.post(BudgetController.storeExpense.url(props.chantier.id), {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            expenseOpen.value = false;
+            expense.reset();
+        },
+        onError,
+    });
+}
+
+const chartLabels = computed(() => props.lines.map((l) => l.post));
 const chartSets = computed(() => [
     {
         label: 'Révisé (M FCFA)',
-        data: lines.value.map((l) => Math.round(l.revised / 1_000_000)),
+        data: props.lines.map((l) => Math.round(l.revised / 1_000_000)),
     },
     {
         label: 'Engagé + réel (M FCFA)',
-        data: lines.value.map((l) =>
+        data: props.lines.map((l) =>
             Math.round((l.committed + l.actual) / 1_000_000),
         ),
     },
 ]);
+
+const fieldClass =
+    'h-9 w-full rounded-md border border-input bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40';
 </script>
 
 <template>
@@ -182,41 +231,46 @@ const chartSets = computed(() => [
             :title="`Budget — ${chantier.name}`"
             :description="chantier.code"
         >
-            <StatusBadge kind="budget" :status="level" />
+            <StatusBadge kind="budget" :status="totals.level" />
             <Button variant="outline" as-child
-                ><Link href="/budget">Tous les chantiers</Link></Button
+                ><Link :href="BudgetController.index.url()"
+                    >Tous les chantiers</Link
+                ></Button
             >
             <Button variant="outline" as-child
                 ><Link :href="`/chantiers/${chantier.id}`"
                     >Fiche chantier</Link
                 ></Button
             >
+            <Button v-if="canManage" variant="outline" @click="lineOpen = true"
+                >Ajouter un poste</Button
+            >
             <Button
-                v-if="can('budget.update') || can('chantiers.update')"
+                v-if="canManage && lines.length"
                 variant="outline"
                 @click="revisionOpen = true"
                 >Réviser le budget</Button
             >
             <Button
-                v-if="can('chantiers.update') || can('budget.update')"
+                v-if="canExpense && lines.length"
                 @click="expenseOpen = true"
                 >Saisir une dépense</Button
             >
         </PageHeader>
 
         <p
-            v-if="level !== 'ok'"
+            v-if="totals.level !== 'ok'"
             class="rounded-lg p-3 text-sm"
             :class="
-                level === 'critical'
+                totals.level === 'critical'
                     ? 'bg-danger-soft text-danger'
                     : 'bg-warning-soft text-warning'
             "
         >
             {{
-                level === 'critical'
+                totals.level === 'critical'
                     ? 'Alerte critique : le budget révisé est entièrement consommé.'
-                    : 'Avertissement : plus de 80 % du budget révisé est consommé.'
+                    : 'Avertissement : le seuil d’avertissement du budget révisé est atteint.'
             }}
             Le conducteur de travaux et la Direction technique sont notifiés.
         </p>
@@ -249,7 +303,8 @@ const chartSets = computed(() => [
                     :show-value="false"
                 />
                 <p class="text-xs text-muted-foreground">
-                    Seuils : avertissement 80 % · alerte critique 100 %.
+                    Consommé = engagé + coût réel. Seuils paramétrables dans
+                    Administration.
                 </p>
             </section>
 
@@ -358,29 +413,67 @@ const chartSets = computed(() => [
                     <h2 class="mb-3 font-display font-semibold">
                         Révisions du budget
                     </h2>
-                    <ul v-if="allRevisions.length" class="divide-y text-sm">
-                        <li
-                            v-for="r in allRevisions"
-                            :key="r.date + r.post"
-                            class="py-2.5"
-                        >
-                            <p class="font-medium">
-                                {{ r.post }} : +{{ fcfa(r.amount) }}
-                            </p>
+                    <ul v-if="revisions.length" class="divide-y text-sm">
+                        <li v-for="r in revisions" :key="r.id" class="py-2.5">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-medium">
+                                    {{ r.post }} : {{ r.amount > 0 ? '+' : ''
+                                    }}{{ fcfa(r.amount) }}
+                                </p>
+                                <StatusBadge
+                                    :label="revisionLabel[r.status]"
+                                    :tone="
+                                        r.status === 'validee'
+                                            ? 'success'
+                                            : r.status === 'rejetee'
+                                              ? 'danger'
+                                              : 'warning'
+                                    "
+                                />
+                            </div>
                             <p class="text-muted-foreground">
                                 « {{ r.reason }} »
                             </p>
                             <p class="text-xs text-muted-foreground">
-                                {{ dateFr(r.date) }} · {{ r.author }} · validé
-                                par {{ r.validatedBy }}
+                                {{ dateFr(r.date) }} · {{ r.author }}
+                                <template v-if="r.decidedBy">
+                                    ·
+                                    {{ revisionLabel[r.status].toLowerCase() }}
+                                    par {{ r.decidedBy }}</template
+                                >
                             </p>
+                            <p
+                                v-if="r.decisionReason"
+                                class="text-xs text-muted-foreground"
+                            >
+                                Motif du rejet : « {{ r.decisionReason }} »
+                            </p>
+                            <div v-if="r.canDecide" class="mt-2 flex gap-2">
+                                <Button
+                                    size="sm"
+                                    class="bg-success text-white hover:bg-success/90"
+                                    @click="validateRevision(r.id)"
+                                    >Valider</Button
+                                >
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="text-destructive"
+                                    @click="rejecting = r.id"
+                                    >Rejeter</Button
+                                >
+                            </div>
                         </li>
                     </ul>
                     <EmptyState v-else compact title="Aucune révision" />
                 </section>
             </div>
         </div>
-        <EmptyState v-else title="Budget non renseigné pour ce chantier" />
+        <EmptyState
+            v-else
+            title="Budget non renseigné pour ce chantier"
+            description="Ajoutez les postes du déboursé sec : ils conditionnent le passage du projet à « En cours » et l’engagement des demandes d’achat."
+        />
 
         <section
             v-if="lines.length"
@@ -398,7 +491,14 @@ const chartSets = computed(() => [
                         <span class="block text-xs text-muted-foreground"
                             >{{ dateFr(e.date) }} · {{ e.post }} ·
                             {{ e.author }} · justificatif :
-                            {{ e.receipt }}</span
+                            <a
+                                v-if="e.receiptUrl"
+                                :href="e.receiptUrl"
+                                target="_blank"
+                                rel="noopener"
+                                class="underline"
+                                >{{ e.receipt }}</a
+                            ></span
                         >
                     </span>
                     <span class="tabular-nums">{{ fcfa(e.amount) }}</span>
@@ -408,19 +508,121 @@ const chartSets = computed(() => [
         </section>
 
         <FormDialog
-            v-model:open="revisionOpen"
-            title="Réviser le budget"
-            description="La révision doit être validée avant d’augmenter le budget révisé."
-            :fields="revisionFields"
-            submit-label="Soumettre"
-            @submit="addRevision"
+            v-model:open="lineOpen"
+            title="Ajouter un poste du déboursé sec"
+            :fields="lineFields"
+            @submit="addLine"
         />
         <FormDialog
-            v-model:open="expenseOpen"
-            title="Saisir une dépense diverse"
-            description="Petits achats, transport… imputés à un poste du budget."
-            :fields="expenseFields"
-            @submit="addExpense"
+            v-model:open="revisionOpen"
+            title="Réviser le budget"
+            description="La révision doit être validée par la Direction avant de modifier le budget révisé."
+            :fields="revisionFields"
+            submit-label="Soumettre"
+            @submit="requestRevision"
         />
+        <ConfirmDialog
+            v-model:open="rejectOpen"
+            title="Rejeter la révision"
+            confirm-label="Rejeter"
+            require-reason
+            destructive
+            @confirm="rejectRevision"
+        />
+
+        <Dialog v-model:open="expenseOpen">
+            <DialogContent class="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Saisir une dépense diverse</DialogTitle>
+                    <DialogDescription
+                        >Petits achats, transport… imputés à un poste du budget.
+                        Le justificatif est obligatoire
+                        (RG10.4).</DialogDescription
+                    >
+                </DialogHeader>
+                <form class="space-y-3" @submit.prevent="submitExpense">
+                    <div class="grid gap-1.5">
+                        <Label for="exp-label">Libellé</Label>
+                        <Input id="exp-label" v-model="expense.label" />
+                        <p
+                            v-if="expense.errors.label"
+                            class="text-sm text-destructive"
+                        >
+                            {{ expense.errors.label }}
+                        </p>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <Label for="exp-post">Poste imputé</Label>
+                        <select
+                            id="exp-post"
+                            v-model="expense.budget_line_id"
+                            :class="fieldClass"
+                        >
+                            <option value="" disabled>Choisir un poste…</option>
+                            <option
+                                v-for="p in postOptions"
+                                :key="p.value"
+                                :value="p.value"
+                            >
+                                {{ p.label }}
+                            </option>
+                        </select>
+                        <p
+                            v-if="expense.errors.budget_line_id"
+                            class="text-sm text-destructive"
+                        >
+                            {{ expense.errors.budget_line_id }}
+                        </p>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <Label for="exp-amount">Montant (FCFA)</Label>
+                        <Input
+                            id="exp-amount"
+                            v-model.number="expense.amount"
+                            type="number"
+                            min="1"
+                            step="1"
+                        />
+                        <p
+                            v-if="expense.errors.amount"
+                            class="text-sm text-destructive"
+                        >
+                            {{ expense.errors.amount }}
+                        </p>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <Label for="exp-receipt">Justificatif</Label>
+                        <input
+                            id="exp-receipt"
+                            type="file"
+                            accept=".pdf,image/*"
+                            :class="fieldClass"
+                            @change="
+                                expense.receipt =
+                                    ($event.target as HTMLInputElement)
+                                        .files?.[0] ?? null
+                            "
+                        />
+                        <p
+                            v-if="expense.errors.receipt"
+                            class="text-sm text-destructive"
+                        >
+                            {{ expense.errors.receipt }}
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="expenseOpen = false"
+                            >Annuler</Button
+                        >
+                        <Button type="submit" :disabled="expense.processing"
+                            >Enregistrer</Button
+                        >
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>

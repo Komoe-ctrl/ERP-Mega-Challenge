@@ -46,5 +46,14 @@ class OrganizationSeeder extends Seeder
             ['code' => 'ABJ-DEPOT'],
             ['agency_id' => $agency->id, 'name' => 'Dépôt central', 'type' => 'depot_central'],
         );
+
+        // Données de démonstration (reprises des maquettes) : deuxième agence, agence désactivée, magasins de chantier.
+        $bouake = Agency::query()->firstOrCreate(['code' => 'BKE'], ['name' => 'Agence Bouaké', 'city' => 'Bouaké']);
+        Agency::query()->firstOrCreate(['code' => 'SPD'], ['name' => 'Agence San-Pédro', 'city' => 'San-Pédro', 'is_active' => false]);
+
+        Site::query()->firstOrCreate(['code' => 'BKE-BUREAU'], ['agency_id' => $bouake->id, 'name' => 'Bureau Bouaké', 'type' => 'bureau']);
+        foreach (['MAG-CH001' => 'Magasin Palmiers Bloc A', 'MAG-CH002' => 'Magasin Palmiers Bloc B'] as $code => $name) {
+            Site::query()->firstOrCreate(['code' => $code], ['agency_id' => $agency->id, 'name' => $name, 'type' => 'magasin_chantier']);
+        }
     }
 }

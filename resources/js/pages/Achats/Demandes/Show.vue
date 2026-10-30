@@ -1,48 +1,55 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Check, CornerUpLeft, Info, X } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/PurchaseRequestController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { dateFr, fcfa, number, TODAY } from '@/lib/format';
+import { dateFr, fcfa, number } from '@/lib/format';
 import { consumptionTone } from '@/lib/status';
-import {
-    articleById,
-    budgetOf,
-    budgetTotals,
-    DIRECTION_THRESHOLD,
-} from '@/mocks/achats';
-import { requests } from '@/mocks/achats';
 import { invoices, orders, receptions } from '@/mocks/v2';
-import type { PurchaseRequest, RequestStatus } from '@/types/erp';
+import type { PurchaseRequest } from '@/types/erp';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    request: PurchaseRequest;
+    budget: {
+        revised: number;
+        committed: number;
+        actual: number;
+        remaining: number;
+        consumption: number;
+    };
+    threshold: number;
+    isAuthor: boolean;
+    canDecide: boolean;
+    directionRequired: boolean;
+    canValidate: boolean;
+    canCancel: boolean;
+    canEdit: boolean;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Achats', href: '/achats/demandes' }] },
 });
 
-const page = usePage();
-const { can } = usePermissions();
-
-// Copie locale : la maquette fait évoluer le statut sans serveur.
-const request = reactive<PurchaseRequest>(
-    structuredClone(requests.find((r) => r.id === props.id) ?? requests[0]),
-);
+// Quantités ajustables par le valideur (RG8.5) ; l'écart est tracé par le serveur.
 const adjusted = reactive<Record<number, number>>(
     Object.fromEntries(
-        request.lines.map((l) => [l.id, l.adjustedQuantity ?? l.quantity]),
+        props.request.lines.map((l) => [
+            l.id,
+            l.adjustedQuantity ?? l.quantity,
+        ]),
     ),
 );
 
 // CA8.2 : depuis la demande, retrouver ses bons de commande, réceptions, factures et leur paiement.
+// Branché avec le processus d'achat complet (V2) ; maquettes en attendant.
 const linkedOrders = computed(() =>
-    orders.filter((o) => o.requestNumbers.includes(request.number)),
+    orders.filter((o) => o.requestNumbers.includes(props.request.number)),
 );
 const linkedReceptions = computed(() =>
     receptions.filter((r) =>
@@ -65,84 +72,55 @@ const dialogOpen = computed({
     },
 });
 
-const unitPrice = (articleId: number) =>
-    request.frozenPrices?.[articleId] ?? articleById(articleId)?.price ?? 0;
-const frozen = computed(() => request.status === 'validee');
+const frozen = computed(() => props.request.status === 'validee');
+const unitPrice = (l: { unitPrice?: number }) => l.unitPrice ?? 0;
 const total = computed(() =>
-    request.lines.reduce(
-        (s, l) => s + unitPrice(l.articleId) * adjusted[l.id],
+    props.request.lines.reduce(
+        (s, l) => s + unitPrice(l) * (adjusted[l.id] ?? 0),
         0,
     ),
 );
 const originalTotal = computed(() =>
-    request.lines.reduce((s, l) => s + unitPrice(l.articleId) * l.quantity, 0),
+    props.request.lines.reduce((s, l) => s + unitPrice(l) * l.quantity, 0),
 );
 
-const totals = computed(() => budgetTotals(budgetOf(request.chantierId)));
 const remainingAfter = computed(
-    () => totals.value.remaining - (frozen.value ? 0 : total.value),
+    () => props.budget.remaining - (frozen.value ? 0 : total.value),
 );
+// Indication à l'écran ; le serveur décide du circuit (RG8.7).
 const needsDirection = computed(
     () =>
-        request.needsDirection ||
-        total.value > DIRECTION_THRESHOLD ||
+        props.directionRequired ||
+        total.value > props.threshold ||
+        originalTotal.value > props.threshold ||
         remainingAfter.value < 0,
 );
 
-// Séparation des tâches : l'auteur ne valide jamais sa propre demande.
-const isAuthor = computed(
-    () => page.props.auth.user.name === request.requester,
-);
-const canDecide = computed(
-    () =>
-        request.status === 'en_attente' &&
-        can('achats.validate') &&
-        !isAuthor.value,
-);
-const canCancel = computed(
-    () =>
-        ['brouillon', 'en_attente', 'renvoyee'].includes(request.status) &&
-        can('achats.create'),
-);
-
-function push(action: string, status: RequestStatus, reason?: string) {
-    request.status = status;
-    request.history.push({
-        date: `${TODAY} ${new Date().toTimeString().slice(0, 5)}`,
-        actor: page.props.auth.user.name,
-        action,
-        reason,
-    });
-}
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0]);
 
 function validate() {
-    // RG8.5 : les écarts de quantité sont tracés ; RG8.6 : prix figés et engagement.
-    const gaps = request.lines.filter((l) => adjusted[l.id] !== l.quantity);
-    request.frozenPrices = Object.fromEntries(
-        request.lines.map((l) => [l.articleId, unitPrice(l.articleId)]),
-    );
-    request.lines.forEach((l) => (l.adjustedQuantity = adjusted[l.id]));
-    push(
-        'Validée',
-        'validee',
-        `Prix figés, engagement de ${fcfa(total.value)}` +
-            (gaps.length ? ` — ${gaps.length} quantité(s) ajustée(s)` : ''),
-    );
-    toast.success(
-        'Demande validée : prix figés et montant engagé sur le budget du chantier.',
+    router.post(
+        PurchaseRequestController.validateRequest.url(props.request.id),
+        { adjustments: { ...adjusted } },
+        { preserveScroll: true, onError },
     );
 }
 
 function onDecision(reason: string) {
-    if (decision.value === 'refuser') {
-        push('Refusée', 'refusee', reason);
-    } else if (decision.value === 'renvoyer') {
-        push('Renvoyée pour correction', 'renvoyee', reason);
-    } else if (decision.value === 'annuler') {
-        push('Annulée par son auteur', 'annulee', reason);
-    }
+    const routes = {
+        refuser: PurchaseRequestController.refuse,
+        renvoyer: PurchaseRequestController.sendBack,
+        annuler: PurchaseRequestController.cancel,
+    } as const;
 
-    toast.success('Décision enregistrée et notifiée au demandeur (maquette).');
+    if (decision.value) {
+        router.post(
+            routes[decision.value].url(props.request.id),
+            { reason },
+            { preserveScroll: true, onError },
+        );
+    }
 }
 
 const titles = {
@@ -201,7 +179,7 @@ const titles = {
                             class="border-t"
                         >
                             <td class="p-3">
-                                {{ articleById(l.articleId)?.label }}
+                                {{ l.articleLabel }}
                                 <StatusBadge
                                     v-if="l.urgency !== 'normale'"
                                     kind="urgency"
@@ -210,7 +188,7 @@ const titles = {
                                 />
                             </td>
                             <td class="p-3 text-right tabular-nums">
-                                {{ fcfa(unitPrice(l.articleId)) }}
+                                {{ fcfa(unitPrice(l)) }}
                                 <span
                                     v-if="frozen"
                                     class="block text-xs text-muted-foreground"
@@ -224,7 +202,7 @@ const titles = {
                                         type="number"
                                         min="0"
                                         class="h-9 w-24 rounded-md border border-input bg-transparent px-2 text-right"
-                                        :aria-label="`Quantité ajustée — ${articleById(l.articleId)?.label}`"
+                                        :aria-label="`Quantité ajustée — ${l.articleLabel}`"
                                     />
                                     <span
                                         v-if="adjusted[l.id] !== l.quantity"
@@ -235,7 +213,7 @@ const titles = {
                                 </template>
                                 <template v-else>
                                     {{ adjusted[l.id] }}
-                                    {{ articleById(l.articleId)?.unit }}
+                                    {{ l.unit }}
                                     <span
                                         v-if="adjusted[l.id] !== l.quantity"
                                         class="block text-xs text-warning"
@@ -245,11 +223,7 @@ const titles = {
                                 </template>
                             </td>
                             <td class="p-3 text-right font-medium tabular-nums">
-                                {{
-                                    fcfa(
-                                        unitPrice(l.articleId) * adjusted[l.id],
-                                    )
-                                }}
+                                {{ fcfa(unitPrice(l) * adjusted[l.id]) }}
                             </td>
                             <td class="p-3 whitespace-nowrap">
                                 {{ dateFr(l.needDate) }}
@@ -278,13 +252,13 @@ const titles = {
                     Impact sur le budget du chantier
                 </h2>
                 <ProgressBar
-                    :value="totals.consumption"
-                    :tone="consumptionTone(totals.consumption)"
-                    :label="`Consommé aujourd’hui : ${number(totals.consumption, 1)} %`"
+                    :value="budget.consumption"
+                    :tone="consumptionTone(budget.consumption)"
+                    :label="`Consommé aujourd’hui : ${number(budget.consumption, 1)} %`"
                     :show-value="false"
                 />
                 <p class="text-sm text-muted-foreground">
-                    Reste à engager : {{ fcfa(totals.remaining) }}
+                    Reste à engager : {{ fcfa(budget.remaining) }}
                     <template v-if="!frozen">
                         → après validation :
                         <strong
@@ -421,12 +395,13 @@ const titles = {
             </p>
         </section>
 
-        <!-- Décision du valideur -->
+        <!-- Décision du valideur : les droits viennent du serveur -->
         <div
             v-if="canDecide"
-            class="sticky bottom-0 -mx-4 flex flex-wrap gap-2 border-t bg-card/95 p-3 backdrop-blur"
+            class="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-2 border-t bg-card/95 p-3 backdrop-blur"
         >
             <Button
+                v-if="canValidate"
                 class="bg-success text-white hover:bg-success/90"
                 @click="validate"
                 ><Check /> Valider</Button
@@ -440,6 +415,14 @@ const titles = {
                 @click="decision = 'refuser'"
                 ><X /> Refuser</Button
             >
+            <p
+                v-if="!canValidate"
+                class="basis-full text-sm text-muted-foreground"
+            >
+                Cette demande dépasse le budget restant ou le seuil de
+                {{ fcfa(threshold) }} : seule la Direction peut la valider
+                (RG8.7). Vous pouvez la renvoyer ou la refuser.
+            </p>
         </div>
         <p
             v-else-if="request.status === 'en_attente' && isAuthor"
@@ -448,19 +431,14 @@ const titles = {
             Vous êtes l’auteur de cette demande : vous ne pouvez pas la valider
             vous-même (séparation des tâches).
         </p>
-        <div
-            v-if="
-                ['renvoyee', 'brouillon'].includes(request.status) &&
-                can('achats.create')
-            "
-        >
+        <div v-if="canEdit">
             <Button as-child
-                ><Link :href="`/achats/demandes/${request.id}/modifier`"
+                ><Link :href="PurchaseRequestController.edit.url(request.id)"
                     >Corriger et soumettre à nouveau</Link
                 ></Button
             >
         </div>
-        <div v-if="canCancel && (isAuthor || !can('achats.validate'))">
+        <div v-if="canCancel">
             <Button
                 variant="ghost"
                 class="text-destructive"

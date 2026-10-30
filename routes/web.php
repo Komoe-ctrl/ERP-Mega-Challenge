@@ -1,8 +1,11 @@
 <?php
 
 use App\Domain\Shared\Enums\RoleName;
+use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LegacyScreenController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PosteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -12,6 +15,8 @@ Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'logi
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::post('pointage', [AttendanceController::class, 'store'])->name('attendance.store');
+    Route::put('poste', [PosteController::class, 'update'])->name('poste.update');
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/lues', [NotificationController::class, 'readAll'])->name('notifications.read-all');
     Route::put('notifications/canaux', [NotificationController::class, 'channels'])->name('notifications.channels');
@@ -77,8 +82,7 @@ Route::middleware(['auth', 'verified', 'can:finance.view'])->prefix('finance')->
 
 // --- Écrans repris de l'application de bureau actuelle (maquette) --------------
 Route::middleware(['auth', 'verified'])->prefix('ecrans')->group(function () {
-    Route::get('{slug}', fn (string $slug) => Inertia::render('Legacy/Ecran', ['slug' => $slug]))
-        ->where('slug', '[a-z0-9-]+')->name('ecrans');
+    Route::get('{slug}', LegacyScreenController::class)->where('slug', '[a-z0-9-]+')->name('ecrans');
 });
 
 /*

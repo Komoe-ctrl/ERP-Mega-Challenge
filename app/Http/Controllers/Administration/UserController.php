@@ -66,7 +66,9 @@ final class UserController extends Controller
 
     public function store(SaveUserRequest $request, CreateUser $action): RedirectResponse
     {
-        $action->execute($request->toData());
+        $actor = $request->user();
+        assert($actor instanceof User);
+        $action->execute($request->toData(), $actor);
 
         $this->toast('Utilisateur créé.');
 
@@ -94,7 +96,9 @@ final class UserController extends Controller
 
     public function update(SaveUserRequest $request, User $user, UpdateUser $action): RedirectResponse
     {
-        $action->execute($user, $request->toData());
+        $actor = $request->user();
+        assert($actor instanceof User);
+        $action->execute($user, $request->toData(), $actor);
 
         $this->toast('Utilisateur mis à jour.');
 

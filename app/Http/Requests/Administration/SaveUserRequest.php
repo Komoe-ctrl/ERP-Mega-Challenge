@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Validator;
 
 /**
  * Création et modification d'un utilisateur. Sur une modification, la route
@@ -47,6 +48,31 @@ final class SaveUserRequest extends FormRequest
             'roles.*' => ['string', Rule::exists('roles', 'name')],
             'password' => [$isUpdate ? 'nullable' : 'required', 'string', Password::default()],
         ];
+    }
+
+    /**
+     * Un administrateur ne peut pas modifier ses propres rôles.
+     *
+     * @return array<int, \Closure(Validator): void>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $target = $this->route('user');
+
+            if (! $target instanceof User || ! $this->user()?->is($target)) {
+                return;
+            }
+
+            $current = $target->getRoleNames()->all();
+            $requested = array_values(array_filter((array) $this->input('roles', []), 'is_string'));
+            sort($current);
+            sort($requested);
+
+            if ($current !== $requested) {
+                $validator->errors()->add('roles', 'Vous ne pouvez pas modifier vos propres rôles.');
+            }
+        }];
     }
 
     public function toData(): UserData

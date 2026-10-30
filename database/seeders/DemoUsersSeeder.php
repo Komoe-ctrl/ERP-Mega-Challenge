@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Domain\Administration\Models\Agency;
 use App\Domain\Administration\Models\Service;
+use App\Domain\Administration\Models\UserPoste;
 use App\Domain\Shared\Enums\RoleName;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -47,7 +48,33 @@ class DemoUsersSeeder extends Seeder
             $user->forceFill(['job_title' => $role->defaultJobTitle()])->save();
 
             $user->syncRoles([$role->value]);
+
+            // Deux comptes occupent plusieurs postes : l'en-tête leur propose le sélecteur de poste.
+            foreach ($this->extraPostes()[$email] ?? [] as [$title, $serviceCode]) {
+                UserPoste::query()->updateOrCreate(['user_id' => $user->id, 'title' => $title], [
+                    'service_id' => Service::query()->where('code', $serviceCode)->value('id'),
+                    'is_default' => false,
+                ]);
+            }
+
+            if (isset($this->extraPostes()[$email])) {
+                UserPoste::query()->updateOrCreate(['user_id' => $user->id, 'title' => $role->defaultJobTitle()], [
+                    'service_id' => $user->service_id,
+                    'is_default' => true,
+                ]);
+            }
         }
+    }
+
+    /**
+     * @return array<string, list<array{string, string}>> postes supplémentaires par e-mail (titre, code du service)
+     */
+    private function extraPostes(): array
+    {
+        return [
+            'direction@megachallenge.local' => [['Directeur Mega Challenge', 'DG']],
+            'conducteur@megachallenge.local' => [['Technicien 1', 'TRV']],
+        ];
     }
 
     /**

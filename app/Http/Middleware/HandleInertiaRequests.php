@@ -2,9 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Administration\Actions\ChoosePoste;
+use App\Domain\Administration\Actions\ClockIn;
 use App\Domain\Shared\Enums\RoleName;
 use App\Domain\Shared\Support\ModuleNavigation;
-use App\Domain\Shared\Support\Present;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -46,7 +47,9 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
                 'roles' => $request->user()?->getRoleNames()->values() ?? [],
                 // Poste affiché dans l'en-tête : titre et service du compte connecté.
-                'poste' => self::poste($request->user()),
+                'poste' => self::poste($request->user(), $request),
+                // Postes du compte (sélecteur de l'en-tête quand il y en a plusieurs) et poste actif.
+                'postes' => self::postes($request->user(), $request),
                 'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
             ],
             'navigation' => ModuleNavigation::for($request->user()),
@@ -74,25 +77,52 @@ class HandleInertiaRequests extends Middleware
                     RoleName::cases(),
                 ),
             ] : null,
+            // Pointage du jour de l'utilisateur authentifié (bouton du tableau de bord, mention de l'en-tête).
+            'attendance' => fn () => self::attendance($request->user()),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
 
     /**
-     * @return array{title: string, service: string}|null
+     * @return array{id: int|null, title: string, service: string}|null
      */
-    private static function poste(?User $user): ?array
+    private static function poste(?User $user, Request $request): ?array
     {
         if ($user === null) {
             return null;
         }
 
-        $name = $user->getRoleNames()->first();
-        $role = is_string($name) ? RoleName::tryFrom($name) : null;
+        $active = app(ChoosePoste::class)->active($user, self::chosenPoste($request));
 
-        return [
-            'title' => $user->job_title ?? $role?->defaultJobTitle() ?? 'Collaborateur',
-            'service' => Present::text($user, 'service.name', '—'),
-        ];
+        return ['id' => $active['id'], 'title' => $active['title'], 'service' => $active['service']];
+    }
+
+    /**
+     * @return list<array{id: int|null, title: string, service: string}>
+     */
+    private static function postes(?User $user, Request $request): array
+    {
+        return $user === null ? [] : app(ChoosePoste::class)->postesOf($user);
+    }
+
+    private static function chosenPoste(Request $request): ?int
+    {
+        $id = $request->session()->get(ChoosePoste::SESSION_KEY);
+
+        return is_int($id) ? $id : null;
+    }
+
+    /**
+     * @return array{today: string, arrivedAt: string|null}|null
+     */
+    private static function attendance(?User $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $attendance = app(ClockIn::class)->today($user);
+
+        return ['today' => now()->toDateString(), 'arrivedAt' => $attendance?->arrived_at->toIso8601String()];
     }
 }

@@ -10,6 +10,7 @@ use App\Domain\Shared\Enums\Module;
 use App\Domain\Shared\Enums\PermissionAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Administration\SaveRoleRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -52,7 +53,9 @@ final class RoleController extends Controller
 
     public function store(SaveRoleRequest $request, SaveRole $action): RedirectResponse
     {
-        $action->execute($request->toData());
+        $actor = $request->user();
+        assert($actor instanceof User);
+        $action->execute($request->toData(), $actor);
 
         $this->toast('Rôle créé.');
 
@@ -77,7 +80,9 @@ final class RoleController extends Controller
 
     public function update(SaveRoleRequest $request, Role $role, SaveRole $action): RedirectResponse
     {
-        $action->execute($request->toData(), $role);
+        $actor = $request->user();
+        assert($actor instanceof User);
+        $action->execute($request->toData(), $actor, $role);
 
         $this->toast('Rôle mis à jour.');
 

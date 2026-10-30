@@ -2,7 +2,6 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
-    Clock,
     Bell,
     ClipboardCheck,
     ClipboardList,
@@ -122,12 +121,6 @@ function pointer() {
 }
 const user = computed(() => page.props.auth.user);
 
-const variantLabel = {
-    terrain: 'Vue terrain',
-    achats: 'Vue achats',
-    direction: 'Vue direction',
-} as const;
-
 // Achats : commandes, factures et stocks seront branchés avec la V2 (maquettes en attendant).
 const openOrders = orders.filter((o) => ['emis', 'partiel'].includes(o.status));
 const toControl = invoices.filter((i) =>
@@ -168,15 +161,7 @@ const alertCount = computed(
         <PageHeader
             :title="`Bonjour, ${user.name}`"
             :description="`Vue d’ensemble de l’activité au ${dateFr(today)}.`"
-        >
-            <StatusBadge :label="variantLabel[variant]" tone="brand" />
-            <Button v-if="hasArrivedToday" variant="outline" disabled>
-                <Clock /> Arrivée pointée
-            </Button>
-            <Button v-else @click="pointer"
-                ><Clock /> Pointer mon arrivée</Button
-            >
-        </PageHeader>
+        />
 
         <div
             v-if="!hasArrivedToday"

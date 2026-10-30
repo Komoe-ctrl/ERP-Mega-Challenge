@@ -5,10 +5,10 @@ import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'ERP Mega Challenge';
 
 void createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) => (title ? `${title} · ${appName}` : appName),
     layout: (name) => {
         switch (true) {
             case name.startsWith('auth/'):
@@ -30,6 +30,8 @@ void createInertiaApp({
     },
     progress: {
         color: '#0057B5',
+        delay: 0,
+        showSpinner: true,
     },
 });
 

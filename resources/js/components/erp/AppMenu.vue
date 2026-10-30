@@ -20,7 +20,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { sidebarMenu } from '@/lib/legacyMenu';
 
 const page = usePage();
-const { can } = usePermissions();
+const { see } = usePermissions();
 
 const path = computed(() => page.url.split('?')[0]);
 
@@ -29,7 +29,7 @@ const groups = computed(() =>
     sidebarMenu
         .map((g) => ({
             ...g,
-            items: g.items.filter((i) => !i.permission || can(i.permission)),
+            items: g.items.filter((i) => see(i.permission)),
         }))
         .filter((g) => g.items.length > 0),
 );
@@ -74,7 +74,10 @@ watch(groupOfActive, (key) => {
             >
                 <SidebarMenuItem>
                     <CollapsibleTrigger as-child>
-                        <SidebarMenuButton>
+                        <SidebarMenuButton
+                            :is-active="g.key === groupOfActive"
+                            class="relative whitespace-nowrap data-[active=true]:before:absolute data-[active=true]:before:inset-y-1.5 data-[active=true]:before:left-0 data-[active=true]:before:w-1 data-[active=true]:before:rounded-full data-[active=true]:before:bg-sidebar-primary"
+                        >
                             <component :is="g.icon" />
                             <span>{{ g.label }}</span>
                             <ChevronRight
@@ -92,8 +95,9 @@ watch(groupOfActive, (key) => {
                                 <SidebarMenuSubButton
                                     as-child
                                     :is-active="item.href === activeHref"
+                                    class="relative text-[13px] whitespace-nowrap data-[active=true]:font-medium data-[active=true]:before:absolute data-[active=true]:before:inset-y-1 data-[active=true]:before:-left-[11px] data-[active=true]:before:w-1 data-[active=true]:before:rounded-full data-[active=true]:before:bg-sidebar-primary"
                                 >
-                                    <Link :href="item.href">
+                                    <Link :href="item.href" prefetch>
                                         <span>{{ item.label }}</span>
                                     </Link>
                                 </SidebarMenuSubButton>

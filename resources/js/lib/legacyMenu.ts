@@ -238,6 +238,11 @@ export const sidebarMenu: MenuGroup[] = [
         label: 'Administration',
         items: [
             {
+                label: 'Accueil Administration',
+                href: '/administration',
+                permission: 'administration.view',
+            },
+            {
                 label: 'Utilisateurs',
                 href: '/administration/users',
                 permission: 'administration.view',
@@ -266,120 +271,119 @@ export const sidebarMenu: MenuGroup[] = [
     },
 ];
 
-export const fichierMenu: (LegacyLink | 'separator')[] = [
+export type FichierGroup = { label: string; items: LegacyLink[] };
+
+const f = (label: string, slug: string, permission: string): LegacyLink => ({
+    label,
+    slug,
+    permission,
+});
+
+/** Menu Fichier (rapports et outils) : un panneau à colonnes, par groupe. */
+export const fichierGroups: FichierGroup[] = [
     {
-        label: 'Exercice budgétaire (choix, ouverture, clôture)',
-        slug: 'exercice-budgetaire',
-        permission: 'budget.view',
+        label: 'Budget',
+        items: [
+            f('Exercice budgétaire', 'exercice-budgetaire', 'budget.view'),
+            f(
+                "Reconduire le budget d'une année",
+                'reconduire-budget',
+                'budget.view',
+            ),
+            f(
+                'Utiliser les réalisés comme budget',
+                'realise-comme-budget',
+                'budget.view',
+            ),
+        ],
     },
     {
-        label: 'Paramètres / Élaboration budgétaire',
-        slug: 'elaboration-budgetaire',
-        permission: 'budget.view',
+        label: 'Réalisé',
+        items: [
+            f('Valeurs réalisées', 'valeurs-realisees', 'budget.view'),
+            f(
+                'Valeurs réalisées détaillées',
+                'valeurs-realisees-detaillees',
+                'budget.view',
+            ),
+            f('Taux réalisé détaillé', 'taux-realise-detaille', 'budget.view'),
+            f('Ratio rapprochement / écart', 'ratio-ecart', 'budget.view'),
+        ],
     },
     {
-        label: "Reconduire le budget d'une année",
-        slug: 'reconduire-budget',
-        permission: 'budget.view',
-    },
-    'separator',
-    {
-        label: 'Valeurs réalisées',
-        slug: 'valeurs-realisees',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Valeurs réalisées détaillées',
-        slug: 'valeurs-realisees-detaillees',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Taux réalisé détaillé',
-        slug: 'taux-realise-detaille',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Utiliser les valeurs réalisées comme budget',
-        slug: 'realise-comme-budget',
-        permission: 'budget.view',
+        label: 'Consultations',
+        items: [
+            f('Déboursé sec par coût', 'debourse-par-cout', 'budget.view'),
+            f(
+                'Déboursé sec par quantité',
+                'debourse-par-quantite',
+                'budget.view',
+            ),
+            f('Notes de frais par projet', 'notes-par-projet', 'budget.view'),
+            f(
+                'Commandes par fournisseur',
+                'commandes-par-fournisseur',
+                'achats.view',
+            ),
+            f(
+                'Situation des clients projets',
+                'situation-clients-projets',
+                'finance.view',
+            ),
+        ],
     },
     {
-        label: 'Ratio rapprochement / écart',
-        slug: 'ratio-ecart',
-        permission: 'budget.view',
-    },
-    'separator',
-    {
-        label: 'Consultation du déboursé sec par coût',
-        slug: 'debourse-par-cout',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Consultation du déboursé sec par quantité',
-        slug: 'debourse-par-quantite',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Liste des notes de frais par projet',
-        slug: 'notes-par-projet',
-        permission: 'budget.view',
-    },
-    {
-        label: 'Liste des commandes par fournisseur',
-        slug: 'commandes-par-fournisseur',
-        permission: 'achats.view',
+        label: 'Imports / exports',
+        items: [
+            f(
+                'Paramètres du fichier à importer',
+                'parametres-import',
+                'administration.view',
+            ),
+            f('Importation de données', 'importation', 'administration.view'),
+            f(
+                'Table des données importées',
+                'donnees-importees',
+                'administration.view',
+            ),
+            f(
+                'Valeurs des données importées',
+                'valeurs-importees',
+                'administration.view',
+            ),
+            f('Ratio des importées', 'ratio-importees', 'administration.view'),
+            f('Exportation de données', 'exportation', 'administration.view'),
+        ],
     },
     {
-        label: 'Situation des clients projets',
-        slug: 'situation-clients-projets',
-        permission: 'finance.view',
-    },
-    'separator',
-    {
-        label: 'Paramètres du fichier à importer',
-        slug: 'parametres-import',
-        permission: 'administration.view',
-    },
-    {
-        label: 'Importation de données',
-        slug: 'importation',
-        permission: 'administration.view',
-    },
-    {
-        label: 'Table des données importées',
-        slug: 'donnees-importees',
-        permission: 'administration.view',
+        label: 'Analytique',
+        items: [
+            f(
+                'Livre analytique des mouvements',
+                'livre-analytique',
+                'finance.view',
+            ),
+            f(
+                'Livre analytique par produits',
+                'livre-analytique-produits',
+                'finance.view',
+            ),
+        ],
     },
     {
-        label: 'Valeurs des données importées',
-        slug: 'valeurs-importees',
-        permission: 'administration.view',
-    },
-    {
-        label: 'Ratio rapprochement / écart des importées',
-        slug: 'ratio-importees',
-        permission: 'administration.view',
-    },
-    {
-        label: 'Exportation de données',
-        slug: 'exportation',
-        permission: 'administration.view',
-    },
-    'separator',
-    {
-        label: 'Livre analytique des mouvements',
-        slug: 'livre-analytique',
-        permission: 'finance.view',
-    },
-    {
-        label: 'Livre analytique des mouvements par produits',
-        slug: 'livre-analytique-produits',
-        permission: 'finance.view',
+        label: 'Paramétrage',
+        items: [
+            f(
+                'Élaboration budgétaire',
+                'elaboration-budgetaire',
+                'budget.view',
+            ),
+        ],
     },
 ];
 
 export const topMenu: { label: string; href: string; permission: string }[] = [
-    { label: 'Tableau de bord', href: '/dashboard', permission: '' },
+    { label: 'Tableau de bord', href: '/dashboard', permission: 'metier' },
     {
         label: 'Tableau de bord mensuel',
         href: href('tableau-de-bord-mensuel'),

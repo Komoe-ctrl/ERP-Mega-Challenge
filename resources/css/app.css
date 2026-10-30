@@ -21,6 +21,12 @@
     --color-line: #d6d0c7;
     --color-field: #8a857d;
     --color-on-dark: #d5d0c8;
+    /* Bleu marine de la marque (barre latérale) et son repère clair : contraste AA
+       (texte #e8eef7 sur #0b2a4f ≈ 12:1 ; blanc sur #17447d ≈ 9:1). */
+    --color-navy: #0b2a4f;
+    --color-navy-hover: #17447d;
+    --color-navy-line: #24497a;
+    --color-navy-mark: #7db4ff;
 }
 
 @theme inline {
@@ -165,15 +171,15 @@
     --chart-5: var(--color-field);
     --radius: 0.625rem;
 
-    --sidebar-background: var(--color-ink);
-    --sidebar-foreground: var(--color-on-dark);
-    --sidebar-primary: var(--color-brand);
-    --sidebar-primary-foreground: var(--color-brand-foreground);
-    --sidebar-accent: #2a2e32;
+    --sidebar-background: var(--color-navy);
+    --sidebar-foreground: #e8eef7;
+    --sidebar-primary: var(--color-navy-mark);
+    --sidebar-primary-foreground: var(--color-navy);
+    --sidebar-accent: var(--color-navy-hover);
     --sidebar-accent-foreground: #ffffff;
-    --sidebar-border: #3a3e42;
-    --sidebar-ring: var(--color-brand);
-    --sidebar: var(--color-ink);
+    --sidebar-border: var(--color-navy-line);
+    --sidebar-ring: var(--color-navy-mark);
+    --sidebar: var(--color-navy);
 }
 
 .dark {
@@ -217,15 +223,15 @@
     --chart-4: #fbbf24;
     --chart-5: #b9b4ac;
 
-    --sidebar-background: #101215;
-    --sidebar-foreground: #d5d0c8;
-    --sidebar-primary: var(--color-brand);
-    --sidebar-primary-foreground: var(--color-brand-foreground);
-    --sidebar-accent: #23272b;
+    --sidebar-background: #071a31;
+    --sidebar-foreground: #e8eef7;
+    --sidebar-primary: var(--color-navy-mark);
+    --sidebar-primary-foreground: #071a31;
+    --sidebar-accent: #123a6b;
     --sidebar-accent-foreground: #ffffff;
-    --sidebar-border: #2a2e32;
-    --sidebar-ring: var(--color-brand);
-    --sidebar: #101215;
+    --sidebar-border: #1b365c;
+    --sidebar-ring: var(--color-navy-mark);
+    --sidebar: #071a31;
 }
 
 @layer base {

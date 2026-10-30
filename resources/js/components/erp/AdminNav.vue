@@ -4,7 +4,8 @@ import { computed } from 'vue';
 
 const page = usePage();
 
-const links = [
+const links: { href: string; label: string; exact?: boolean }[] = [
+    { href: '/administration', label: 'Accueil', exact: true },
     { href: '/administration/users', label: 'Utilisateurs' },
     { href: '/administration/roles', label: 'Rôles' },
     { href: '/administration/matrice', label: 'Matrice des droits' },
@@ -27,9 +28,11 @@ const current = computed(() => page.url.split('?')[0]);
                     :href="l.href"
                     class="-mb-px block border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors"
                     :class="
-                        current.startsWith(l.href)
-                            ? 'border-brand text-foreground'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        l.exact
+                            ? current === l.href
+                            : current.startsWith(l.href)
+                              ? 'border-brand text-foreground'
+                              : 'border-transparent text-muted-foreground hover:text-foreground'
                     "
                 >
                     {{ l.label }}

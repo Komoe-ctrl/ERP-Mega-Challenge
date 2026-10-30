@@ -20,13 +20,10 @@ withDefaults(defineProps<Props>(), {
     <AppShell variant="sidebar">
         <AppSidebar />
         <AppContent variant="sidebar" class="min-w-0 overflow-x-clip">
-            <div
-                class="sticky top-0 z-30 bg-background"
-                data-test="sticky-header"
-            >
+            <div class="sticky top-0 z-30 bg-card" data-test="sticky-header">
                 <LegacyHeader />
-                <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             </div>
+            <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             <slot />
         </AppContent>
         <Toaster />

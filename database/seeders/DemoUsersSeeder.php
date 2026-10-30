@@ -56,6 +56,7 @@ class DemoUsersSeeder extends Seeder
             ['Kouadio Brou', 'direction@megachallenge.local', RoleName::DirectionGenerale, 'DG'],
             ['Ibrahim Coulibaly', 'conducteur@megachallenge.local', RoleName::ConducteurTravaux, 'TRV'],
             ['Aminata Diabaté', 'direction.technique@megachallenge.local', RoleName::DirectionTechnique, 'DT'],
+            ['Yao Kouassi', 'conducteur2@megachallenge.local', RoleName::ConducteurTravaux, 'TRV'],
             ['Awa Koné', 'achats@megachallenge.local', RoleName::ServiceAchatsBtp, 'ACH'],
             ['Séraphin Konan', 'chef@megachallenge.local', RoleName::ChefChantier, 'TRV'],
             ['Adjoua Kra', 'magasin@megachallenge.local', RoleName::Magasinier, 'MAG'],

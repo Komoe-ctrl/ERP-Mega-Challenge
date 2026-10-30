@@ -11,6 +11,10 @@ use App\Domain\Administration\Models\Role;
 use App\Domain\Administration\Models\Service;
 use App\Domain\Administration\Models\Setting;
 use App\Domain\Administration\Models\Site;
+use App\Domain\Budget\Models\BudgetLine;
+use App\Domain\Chantiers\Models\Chantier;
+use App\Domain\Clients\Models\Client;
+use App\Domain\Projets\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 
@@ -36,6 +40,10 @@ final readonly class ActivityEntryData
         Site::class => 'Site',
         Setting::class => 'Paramètre',
         FiscalYear::class => 'Exercice',
+        Project::class => 'Projet',
+        Chantier::class => 'Chantier',
+        Client::class => 'Client',
+        BudgetLine::class => 'Poste budgétaire',
     ];
 
     /**

@@ -25,14 +25,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 |
 */
 
-// --- V1 : Projets (M4) ---------------------------------------------------
-Route::middleware(['auth', 'verified', 'can:projets.view'])->prefix('projets')->name('projets.')->group(function () {
-    Route::inertia('/', 'Projets/Index')->name('index');
-    Route::inertia('creer', 'Projets/Form')->name('create');
-    Route::get('{id}', fn (int $id) => Inertia::render('Projets/Show', ['id' => $id]))->whereNumber('id')->name('show');
-    Route::get('{id}/modifier', fn (int $id) => Inertia::render('Projets/Form', ['id' => $id]))->whereNumber('id')->name('edit');
-});
-
 // --- V1 : Chantiers (M7) ---------------------------------------------------
 Route::middleware(['auth', 'verified', 'can:chantiers.view'])->prefix('chantiers')->name('chantiers.')->group(function () {
     Route::inertia('/', 'Chantiers/Index')->name('index');
@@ -143,3 +135,4 @@ Route::post('demo/role', function (Request $request) {
 
 require __DIR__.'/settings.php';
 require __DIR__.'/administration.php';
+require __DIR__.'/projets.php';

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowRight, FileText, Paperclip, Pencil } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ProjectController from '@/actions/App/Http/Controllers/Projets/ProjectController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -10,26 +11,24 @@ import StatusBadge from '@/components/erp/StatusBadge.vue';
 import StatusTimeline from '@/components/erp/StatusTimeline.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
-import { dateFr, fcfa, TODAY } from '@/lib/format';
+import { dateFr, fcfa } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { budgetOf } from '@/mocks/achats';
-import { chantiers, projects } from '@/mocks/chantiers';
-import { clients, contracts, quotes } from '@/mocks/v3';
-import type { ProjectStatus } from '@/types/erp';
+import type { Project, ProjectStatus, SiteStatus } from '@/types/erp';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    project: Project;
+    chantiers: { id: number; code: string; name: string; status: SiteStatus }[];
+    nextStatus: ProjectStatus | null;
+    canAbandon: boolean;
+    quote: { id: number; number: string; version: number } | null;
+    contract: { id: number; number: string } | null;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Projets', href: '/projets' }] },
 });
 
 const { can } = usePermissions();
-const project = computed(
-    () => projects.find((p) => p.id === props.id) ?? projects[0],
-);
-const projectChantiers = computed(() =>
-    chantiers.filter((c) => c.projectId === project.value.id),
-);
 
 // Parcours du projet (cahier des charges, M4).
 const journey = [
@@ -47,85 +46,48 @@ const steps = journey.map((key) => ({
     label: statuses.project[key].label,
 }));
 
-// Statut courant modifiable localement (maquette).
-const status = ref<ProjectStatus>(project.value.status);
-const documents = ref([...project.value.documents]);
-const nextStatus = computed(() => {
-    const i = journey.indexOf(status.value as (typeof journey)[number]);
-
-    return i >= 0 && i < journey.length - 1 ? journey[i + 1] : null;
-});
-
+const status = computed(() => props.project.status);
+const documents = computed(() => props.project.documents ?? []);
 const abandonOpen = ref(false);
-// RG4.1 : abandon possible à tout statut antérieur à « Marché ».
-const canAbandon = computed(() =>
-    ['etude', 'devis', 'appel_offres'].includes(status.value),
-);
+// RG4.3 : un projet clôturé ou abandonné est en lecture seule.
 const readOnly = computed(
     () => status.value === 'cloture' || status.value === 'abandonne',
 );
 
-// Liens croisés : client, marché et devis du projet.
-const client = computed(() =>
-    clients.find((c) => c.name === project.value.clientName),
-);
-const contract = computed(() =>
-    contracts.find((c) =>
-        c.projectName.startsWith(project.value.name.split(' — ')[0]),
-    ),
-);
-const quote = computed(() =>
-    quotes.find((q) =>
-        q.projectName.startsWith(project.value.name.split(' — ')[0]),
-    ),
-);
+// Toutes les règles (RG4.1 à RG4.3) sont appliquées par le serveur ; ses refus
+// reviennent en notification.
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0]);
 
 function advance() {
-    if (!nextStatus.value) {
-        return;
-    }
-
-    // RG4.2 : « En cours » exige au moins un chantier avec budget (DS) et responsable.
-    if (nextStatus.value === 'en_cours') {
-        const ready = projectChantiers.value.some(
-            (c) => c.manager && budgetOf(c.id).length > 0,
-        );
-
-        if (!ready) {
-            toast.error(
-                'Impossible de passer à « En cours » : créez au moins un chantier avec un budget (déboursé sec) et un responsable.',
-            );
-
-            return;
-        }
-    }
-
-    status.value = nextStatus.value;
-    toast.success(
-        `Projet passé au statut « ${statuses.project[status.value].label} » (maquette).`,
+    router.post(
+        ProjectController.advance.url(props.project.id),
+        {},
+        { preserveScroll: true, onError },
     );
 }
 
 function abandon(reason: string) {
-    status.value = 'abandonne';
-    toast.success(`Projet abandonné — motif : ${reason}`);
+    router.post(
+        ProjectController.abandon.url(props.project.id),
+        { reason },
+        { preserveScroll: true, onError },
+    );
 }
 
 function addDocument(event: Event) {
-    const files = (event.target as HTMLInputElement).files;
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
 
-    for (const file of Array.from(files ?? [])) {
-        if (file.size > 20 * 1024 * 1024) {
-            toast.error(`${file.name} dépasse 20 Mo.`);
-            continue;
-        }
-
-        documents.value.push({
-            name: file.name,
-            size: `${(file.size / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`,
-            date: TODAY,
-        });
+    if (files.length) {
+        router.post(
+            ProjectController.storeDocument.url(props.project.id),
+            { files },
+            { preserveScroll: true, forceFormData: true, onError },
+        );
     }
+
+    input.value = '';
 }
 </script>
 
@@ -143,11 +105,14 @@ function addDocument(event: Event) {
                 variant="outline"
                 as-child
             >
-                <Link :href="`/projets/${project.id}/modifier`"
+                <Link :href="ProjectController.edit.url(project.id)"
                     ><Pencil /> Modifier</Link
                 >
             </Button>
-            <Button v-if="can('projets.update') && nextStatus" @click="advance">
+            <Button
+                v-if="can('projets.update') && nextStatus && !readOnly"
+                @click="advance"
+            >
                 <ArrowRight /> Passer à «
                 {{ statuses.project[nextStatus].label }} »
             </Button>
@@ -190,10 +155,7 @@ function addDocument(event: Event) {
             <KpiCard label="Budget" :value="fcfa(project.budget)" />
             <KpiCard label="Début" :value="dateFr(project.startDate)" />
             <KpiCard label="Fin prévue" :value="dateFr(project.endDate)" />
-            <KpiCard
-                label="Chantiers"
-                :value="String(projectChantiers.length)"
-            />
+            <KpiCard label="Chantiers" :value="String(chantiers.length)" />
         </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
@@ -203,12 +165,11 @@ function addDocument(event: Event) {
                     <dt class="text-muted-foreground">Client</dt>
                     <dd>
                         <Link
-                            v-if="client"
-                            :href="`/clients/${client.id}`"
+                            v-if="project.clientId"
+                            :href="`/clients/${project.clientId}`"
                             class="hover:underline"
                             >{{ project.clientName }}</Link
                         >
-                        <template v-else>{{ project.clientName }}</template>
                     </dd>
                     <dt class="text-muted-foreground">Responsable</dt>
                     <dd>{{ project.manager }}</dd>
@@ -290,9 +251,9 @@ function addDocument(event: Event) {
                     >
                 </Button>
             </div>
-            <ul v-if="projectChantiers.length" class="divide-y text-sm">
+            <ul v-if="chantiers.length" class="divide-y text-sm">
                 <li
-                    v-for="c in projectChantiers"
+                    v-for="c in chantiers"
                     :key="c.id"
                     class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                 >

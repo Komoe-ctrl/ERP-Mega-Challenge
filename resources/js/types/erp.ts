@@ -25,14 +25,17 @@ export type Project = {
     clientId: Id | null;
     clientName: string;
     location: string;
+    managerId?: Id;
     manager: string;
+    agencyId?: Id;
     agency: string;
     budget: number;
     startDate: string;
     endDate: string;
     status: ProjectStatus;
-    abandonReason?: string;
-    documents: { name: string; size: string; date: string }[];
+    abandonReason?: string | null;
+    /** Présents sur la fiche du projet uniquement. */
+    documents?: { name: string; size: string; date: string }[];
 };
 
 /* ---------- Chantiers (M7) ---------- */

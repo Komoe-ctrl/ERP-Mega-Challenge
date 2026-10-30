@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
 
         if (config('erp.seed_demo_users') === true) {
             $this->call(DemoUsersSeeder::class);
+            $this->call(ProjectsSeeder::class);
         }
     }
 }

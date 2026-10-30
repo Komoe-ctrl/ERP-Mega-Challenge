@@ -252,6 +252,9 @@ export type SettingGroup = {
 
 export type Supplier = {
     id: Id;
+    number?: string;
+    email?: string | null;
+    active?: boolean;
     name: string;
     categories: string[];
     contact: string;

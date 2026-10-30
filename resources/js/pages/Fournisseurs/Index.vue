@@ -1,38 +1,50 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus, Star } from '@lucide/vue';
 import { h, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import SupplierController from '@/actions/App/Http/Controllers/Fournisseurs/SupplierController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { usePermissions } from '@/composables/usePermissions';
-import { linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
-import { suppliers } from '@/mocks/v2';
+import { linkCell, toneBadgeCell } from '@/lib/cells';
+import type { DataTableColumn } from '@/lib/dataTable';
+import type { Paginated } from '@/types';
 import type { Supplier } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type Filters = { q: string; category: string; state: string };
+
+const props = defineProps<{
+    suppliers: Paginated<Supplier>;
+    filters: Filters;
+    categories: string[];
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Fournisseurs', href: '/fournisseurs' }] },
 });
 
 const { can } = usePermissions();
-
-const supplierCategories = [
-    'Matériaux',
-    'Équipements',
-    'Engins',
-    'Transport',
-    'Sous-traitance',
-    'Prestations techniques',
-];
-
-const rows = ref<Supplier[]>(suppliers.map((s) => ({ ...s })));
+const search = ref(props.filters.q);
 const createOpen = ref(false);
-const categoryOptions = supplierCategories.map((c) => ({ value: c, label: c }));
+
+function apply(changes: Partial<Filters>) {
+    const next = { ...props.filters, ...changes };
+
+    router.get(
+        SupplierController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
+
+const categoryOptions = props.categories.map((c) => ({ value: c, label: c }));
 
 const fields: FieldDef[] = [
     {
@@ -41,12 +53,6 @@ const fields: FieldDef[] = [
         required: true,
         minLength: 3,
         wide: true,
-        validate: (v) =>
-            rows.value.some(
-                (s) => s.name.toLowerCase() === String(v).trim().toLowerCase(),
-            )
-                ? 'Ce fournisseur existe déjà.'
-                : null,
     },
     {
         name: 'category',
@@ -71,9 +77,11 @@ const fields: FieldDef[] = [
         pattern: /^\+?[\d\s]{8,18}$/,
         patternMessage: 'Numéro invalide (ex. +225 07 00 00 00 00).',
     },
+    { name: 'email', label: 'E-mail (facultatif)', type: 'email' },
     { name: 'city', label: 'Ville', required: true },
 ];
 
+// Le serveur refait toute la validation (doublons, catégories) ; ses messages reviennent en notification.
 function create(v: FieldValues) {
     const categories = [
         String(v.category),
@@ -81,18 +89,19 @@ function create(v: FieldValues) {
             ? [String(v.category2)]
             : []),
     ];
-    rows.value.push({
-        id: Date.now(),
-        name: String(v.name),
-        categories,
-        contact: String(v.contact),
-        phone: String(v.phone),
-        city: String(v.city),
-        rating: 0,
-        openOrders: 0,
-        unpaidInvoices: 0,
-    });
-    toast.success('Fournisseur créé (maquette).');
+
+    router.post(
+        SupplierController.store.url(),
+        {
+            name: v.name,
+            contact: v.contact,
+            phone: v.phone,
+            email: v.email || null,
+            city: v.city,
+            categories,
+        },
+        { onError: (errors) => toast.error(Object.values(errors)[0]) },
+    );
 }
 
 const columns: DataTableColumn<Supplier>[] = [
@@ -101,7 +110,7 @@ const columns: DataTableColumn<Supplier>[] = [
         header: 'Fournisseur',
         cell: ({ row }) =>
             linkCell(
-                `/fournisseurs/${row.original.id}`,
+                SupplierController.show.url(row.original.id),
                 row.original.name,
                 row.original.city,
             ),
@@ -109,7 +118,6 @@ const columns: DataTableColumn<Supplier>[] = [
     {
         id: 'categories',
         header: 'Catégories',
-        accessorFn: (s) => s.categories.join(', '),
         cell: ({ row }) =>
             h(
                 'div',
@@ -139,11 +147,16 @@ const columns: DataTableColumn<Supplier>[] = [
                   )
                 : h('span', { class: 'text-muted-foreground' }, 'Non évalué'),
     },
-    { accessorKey: 'openOrders', header: 'Commandes en cours' },
-    { accessorKey: 'unpaidInvoices', header: 'Factures impayées' },
+    {
+        id: 'state',
+        header: 'État',
+        cell: ({ row }) =>
+            toneBadgeCell(
+                row.original.active === false ? 'Désactivé' : 'Actif',
+                row.original.active === false ? 'neutral' : 'success',
+            ),
+    },
 ];
-
-const filters: DataTableFilter[] = [];
 </script>
 
 <template>
@@ -152,18 +165,63 @@ const filters: DataTableFilter[] = [];
     <div class="space-y-4 p-4">
         <PageHeader
             title="Fournisseurs"
-            description="Catégories, contacts, historique des commandes et évaluation après chaque réception."
+            description="Catégories, contacts, tarifs et, avec le processus d’achat, historique des commandes et évaluation."
         >
             <Button v-if="can('fournisseurs.create')" @click="createOpen = true"
                 ><Plus /> Nouveau fournisseur</Button
             >
         </PageHeader>
+
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher un fournisseur, une ville…"
+                    aria-label="Rechercher un fournisseur"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par catégorie"
+                :value="filters.category"
+                @change="
+                    apply({
+                        category: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Catégorie : toutes</option>
+                <option v-for="c in categories" :key="c" :value="c">
+                    {{ c }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par état"
+                :value="filters.state"
+                @change="
+                    apply({ state: ($event.target as HTMLSelectElement).value })
+                "
+            >
+                <option value="">État : tous</option>
+                <option value="actif">Actifs</option>
+                <option value="inactif">Désactivés</option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher un fournisseur, une catégorie…"
+            :data="suppliers.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun fournisseur ne correspond à ces filtres."
         />
+        <PaginationBar :page="suppliers" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Nouveau fournisseur"

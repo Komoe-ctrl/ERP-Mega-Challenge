@@ -41,12 +41,6 @@ Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->na
     Route::inertia('factures', 'Achats/Factures/Index')->name('factures');
 });
 
-// --- V2 : Fournisseurs (M3) ---------------------------------------------------
-Route::middleware(['auth', 'verified', 'can:fournisseurs.view'])->prefix('fournisseurs')->name('fournisseurs.')->group(function () {
-    Route::inertia('/', 'Fournisseurs/Index')->name('index');
-    Route::get('{id}', fn (int $id) => Inertia::render('Fournisseurs/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
-
 // --- V2 : Stocks BTP (M9) ----------------------------------------------------
 Route::middleware(['auth', 'verified', 'can:stocks.view'])->prefix('stocks')->name('stocks.')->group(function () {
     Route::inertia('/', 'Stocks/Index')->name('index');
@@ -120,3 +114,4 @@ require __DIR__.'/projets.php';
 require __DIR__.'/chantiers.php';
 require __DIR__.'/achats.php';
 require __DIR__.'/budget.php';
+require __DIR__.'/fournisseurs.php';

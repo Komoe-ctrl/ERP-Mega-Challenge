@@ -1,40 +1,25 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import PageHeader from '@/components/erp/PageHeader.vue';
-import SubNav from '@/components/erp/SubNav.vue';
-import { achatsNav } from '@/lib/navs';
+import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/PurchaseRequestController';
 import EmptyState from '@/components/erp/EmptyState.vue';
+import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
+import SubNav from '@/components/erp/SubNav.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa } from '@/lib/format';
-import {
-    budgetOf,
-    budgetTotals,
-    DIRECTION_THRESHOLD,
-    requestTotal,
-    requests,
-} from '@/mocks/achats';
+import { achatsNav } from '@/lib/navs';
+import type { PurchaseRequest } from '@/types/erp';
+
+type Pending = Omit<PurchaseRequest, 'lines' | 'history'> & {
+    remaining: number;
+    direction: boolean;
+};
+
+defineProps<{ pending: Pending[] }>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Achats', href: '/achats/demandes' }] },
 });
-
-const pending = requests
-    .filter((r) => r.status === 'en_attente')
-    .map((r) => {
-        const total = requestTotal(r);
-        const remaining = budgetTotals(budgetOf(r.chantierId)).remaining;
-
-        return {
-            r,
-            total,
-            remaining,
-            direction:
-                r.needsDirection ||
-                total > DIRECTION_THRESHOLD ||
-                total > remaining,
-        };
-    });
 </script>
 
 <template>
@@ -49,7 +34,7 @@ const pending = requests
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article
-                v-for="{ r, total, remaining, direction } in pending"
+                v-for="r in pending"
                 :key="r.id"
                 class="space-y-3 rounded-xl border bg-card p-4 shadow-xs"
             >
@@ -61,7 +46,7 @@ const pending = requests
                         </p>
                     </div>
                     <StatusBadge
-                        v-if="direction"
+                        v-if="r.direction"
                         label="Validation Direction"
                         tone="brand"
                     />
@@ -75,7 +60,7 @@ const pending = requests
                     <div>
                         <dt class="text-xs text-muted-foreground">Montant</dt>
                         <dd class="font-medium tabular-nums">
-                            {{ fcfa(total) }}
+                            {{ fcfa(r.total ?? 0) }}
                         </dd>
                     </div>
                     <div class="col-span-2">
@@ -84,14 +69,18 @@ const pending = requests
                         </dt>
                         <dd
                             class="tabular-nums"
-                            :class="total > remaining ? 'text-danger' : ''"
+                            :class="
+                                (r.total ?? 0) > r.remaining
+                                    ? 'text-danger'
+                                    : ''
+                            "
                         >
-                            {{ fcfa(remaining) }}
+                            {{ fcfa(r.remaining) }}
                         </dd>
                     </div>
                 </dl>
                 <Button class="w-full" as-child>
-                    <Link :href="`/achats/demandes/${r.id}`"
+                    <Link :href="PurchaseRequestController.show.url(r.id)"
                         >Examiner et décider</Link
                     >
                 </Button>

@@ -27,11 +27,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 // --- V1 : Achats — demandes et référentiel des prix (M8) --------------------
 Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
-    Route::inertia('demandes', 'Achats/Demandes/Index')->name('demandes');
-    Route::inertia('demandes/creer', 'Achats/Demandes/Create')->name('demandes.create');
-    Route::get('demandes/{id}/modifier', fn (int $id) => Inertia::render('Achats/Demandes/Create', ['id' => $id]))->whereNumber('id')->name('demandes.edit');
-    Route::get('demandes/{id}', fn (int $id) => Inertia::render('Achats/Demandes/Show', ['id' => $id]))->whereNumber('id')->name('demandes.show');
-    Route::inertia('a-valider', 'Achats/Demandes/AValider')->name('a-valider');
     // V2 : processus achat complet (consultation, commande, réception, facture)
     Route::inertia('consultations', 'Achats/Consultations/Index')->name('consultations');
     Route::get('consultations/{id}', fn (int $id) => Inertia::render('Achats/Consultations/Show', ['id' => $id]))->whereNumber('id')->name('consultations.show');

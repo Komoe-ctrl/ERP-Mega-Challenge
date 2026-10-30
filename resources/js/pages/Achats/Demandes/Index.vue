@@ -1,29 +1,49 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { BookOpen, ClipboardCheck, Plus } from '@lucide/vue';
+import { ref } from 'vue';
+import PurchaseRequestController from '@/actions/App/Http/Controllers/Achats/PurchaseRequestController';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import SubNav from '@/components/erp/SubNav.vue';
-import { achatsNav } from '@/lib/navs';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa } from '@/lib/format';
+import { achatsNav } from '@/lib/navs';
 import { statuses } from '@/lib/status';
-import { requestTotal, requests } from '@/mocks/achats';
-import { chantiers } from '@/mocks/chantiers';
+import type { Paginated } from '@/types';
 import type { PurchaseRequest } from '@/types/erp';
+
+type Row = Omit<PurchaseRequest, 'lines' | 'history'>;
+type Filters = { q: string; status: string; chantier: string };
+
+const props = defineProps<{
+    requests: Paginated<Row>;
+    filters: Filters;
+    chantiers: { value: string; label: string }[];
+    pending: number;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Achats', href: '/achats/demandes' }] },
 });
 
 const { can } = usePermissions();
+const search = ref(props.filters.q);
 
-type Row = PurchaseRequest & { total: number };
-const rows: Row[] = requests.map((r) => ({ ...r, total: requestTotal(r) }));
-const pending = requests.filter((r) => r.status === 'en_attente').length;
+function apply(changes: Partial<Filters>) {
+    const next = { ...props.filters, ...changes };
+
+    router.get(
+        PurchaseRequestController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
 
 const columns: DataTableColumn<Row>[] = [
     {
@@ -31,7 +51,7 @@ const columns: DataTableColumn<Row>[] = [
         header: 'Demande',
         cell: ({ row }) =>
             linkCell(
-                `/achats/demandes/${row.original.id}`,
+                PurchaseRequestController.show.url(row.original.id),
                 row.original.number,
                 row.original.justification,
             ),
@@ -46,29 +66,12 @@ const columns: DataTableColumn<Row>[] = [
     {
         accessorKey: 'total',
         header: 'Montant',
-        cell: ({ row }) => amountCell(fcfa(row.original.total)),
+        cell: ({ row }) => amountCell(fcfa(row.original.total ?? 0)),
     },
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('request', row.original.status),
-    },
-];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.request).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
-    },
-    {
-        columnId: 'chantierName',
-        label: 'Chantier',
-        options: chantiers.map((c) => ({ value: c.name, label: c.name })),
     },
 ];
 </script>
@@ -87,12 +90,12 @@ const filters: DataTableFilter[] = [
                 >
             </Button>
             <Button v-if="can('achats.validate')" variant="outline" as-child>
-                <Link href="/achats/a-valider"
+                <Link :href="PurchaseRequestController.pending.url()"
                     ><ClipboardCheck /> À valider ({{ pending }})</Link
                 >
             </Button>
             <Button v-if="can('achats.create')" as-child>
-                <Link href="/achats/demandes/creer"
+                <Link :href="PurchaseRequestController.create.url()"
                     ><Plus /> Nouvelle demande</Link
                 >
             </Button>
@@ -100,11 +103,61 @@ const filters: DataTableFilter[] = [
 
         <SubNav :links="achatsNav" />
 
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher une demande…"
+                    aria-label="Rechercher une demande"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par statut"
+                :value="filters.status"
+                @change="
+                    apply({
+                        status: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Statut : tous</option>
+                <option
+                    v-for="(meta, value) in statuses.request"
+                    :key="value"
+                    :value="value"
+                >
+                    {{ meta.label }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par chantier"
+                :value="filters.chantier"
+                @change="
+                    apply({
+                        chantier: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Chantier : tous</option>
+                <option v-for="c in chantiers" :key="c.value" :value="c.value">
+                    {{ c.label }}
+                </option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher une demande…"
+            :data="requests.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucune demande ne correspond à ces filtres."
         />
+        <PaginationBar :page="requests" />
     </div>
 </template>

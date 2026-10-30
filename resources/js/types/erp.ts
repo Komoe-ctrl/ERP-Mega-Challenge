@@ -114,7 +114,11 @@ export type RequestLine = {
     articleId: Id;
     quantity: number;
     /** Quantité ajustée par le valideur (RG8.5), l'écart est tracé. */
-    adjustedQuantity?: number;
+    adjustedQuantity?: number | null;
+    /** Fournis par le serveur : libellé, unité et prix unitaire (figé après validation). */
+    articleLabel?: string;
+    unit?: string;
+    unitPrice?: number;
     needDate: string;
     urgency: Urgency;
 };
@@ -123,7 +127,7 @@ export type RequestEvent = {
     date: string;
     actor: string;
     action: string;
-    reason?: string;
+    reason?: string | null;
 };
 
 export type PurchaseRequest = {
@@ -132,6 +136,11 @@ export type PurchaseRequest = {
     chantierId: Id;
     chantierName: string;
     requester: string;
+    requesterId?: Id;
+    budgetLineId?: Id | null;
+    /** Montant courant calculé par le serveur. */
+    total?: number;
+    frozen?: boolean;
     createdAt: string;
     status: RequestStatus;
     justification: string;
@@ -348,7 +357,7 @@ export type StockMovement = {
     to: string;
     chantier?: string;
     author: string;
-    reason?: string;
+    reason?: string | null;
 };
 
 export type InventoryLine = {

@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { Bell, LayoutGrid } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
+import LegacyAccordion from '@/components/erp/LegacyAccordion.vue';
 import RoleSwitcher from '@/components/erp/RoleSwitcher.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -62,6 +63,7 @@ const mainNavItems = computed<NavItem[]>(() => [
 
         <SidebarContent>
             <NavMain :items="mainNavItems" />
+            <LegacyAccordion />
         </SidebarContent>
 
         <SidebarFooter>

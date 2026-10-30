@@ -65,7 +65,7 @@ enum RoleName: string
     public function home(): array
     {
         return match ($this) {
-            self::Administrateur => ['/administration/users', 'administration.view'],
+            self::Administrateur => ['/administration', 'administration.view'],
             self::DirectionGenerale, self::DirectionTechnique => ['/dashboard', null],
             self::ServiceAchatsBtp => ['/achats/a-valider', 'achats.view'],
             self::ConducteurTravaux, self::ChefChantier => ['/chantiers', 'chantiers.view'],
@@ -99,9 +99,9 @@ enum RoleName: string
         $full = [...$write, PermissionAction::Validate];
 
         return match ($this) {
-            // Écriture : Administration. Lecture : tous les modules.
+            // L'Administrateur ne gère que l'Administration (comptes, rôles, paramètres,
+            // journal) : il ne voit aucun module métier.
             self::Administrateur => [
-                ...$this->allModules($read),
                 Module::Administration->value => [...$full, PermissionAction::Delete],
             ],
             // Validations de niveau direction. Lecture : tous les modules.

@@ -148,7 +148,7 @@ it('autorise la lecture aux profils concernés et réserve l\'écriture au Servi
     $this->actingAs($user)->post(route('fournisseurs.tariffs.store', $supplier), ['article_id' => Article::factory()->create()->id, 'price' => 100])->assertForbidden();
 
     expect($supplier->refresh()->is_active)->toBeTrue()->and(Supplier::query()->count())->toBe(1);
-})->with([RoleName::Finance, RoleName::DirectionGenerale, RoleName::Administrateur]);
+})->with([RoleName::Finance, RoleName::DirectionGenerale]);
 
 it('refuse les fournisseurs aux profils sans accès au module (403)', function (RoleName $role) {
     $user = userWithRole($role, [

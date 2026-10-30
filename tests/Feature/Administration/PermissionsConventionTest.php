@@ -44,7 +44,7 @@ it('applique la matrice de droits du cahier des charges', function (RoleName $ro
     expect(Role::findByName($role->value)->hasPermissionTo($permission))->toBe($expected);
 })->with([
     'admin configure l\'administration' => [RoleName::Administrateur, 'administration.update', true],
-    'admin lit tous les modules' => [RoleName::Administrateur, 'finance.view', true],
+    'admin ne voit aucun module métier' => [RoleName::Administrateur, 'finance.view', false],
     'admin ne valide pas les achats' => [RoleName::Administrateur, 'achats.validate', false],
     'direction générale valide partout' => [RoleName::DirectionGenerale, 'achats.validate', true],
     'direction générale ne crée pas' => [RoleName::DirectionGenerale, 'achats.create', false],

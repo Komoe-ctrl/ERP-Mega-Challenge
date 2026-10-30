@@ -12,8 +12,10 @@ use App\Domain\Chantiers\Models\Task;
 use App\Domain\Chantiers\Support\PlanningCalculator;
 use App\Domain\Projets\Models\Project;
 use App\Domain\Shared\Enums\RoleName;
+use App\Http\Responses\RoleHome;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 use Inertia\Inertia;
@@ -27,10 +29,15 @@ use Inertia\Response;
  */
 final class DashboardController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
         assert($user instanceof User);
+
+        // Pas de module métier (Administrateur) : l'accueil Administration remplace le tableau de bord.
+        if ($user->can('administration.view') && ! RoleHome::hasBusinessAccess($user)) {
+            return redirect()->to(RoleHome::for($user));
+        }
 
         $variant = $this->variant($user);
 

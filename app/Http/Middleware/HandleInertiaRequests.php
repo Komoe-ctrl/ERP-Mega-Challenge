@@ -52,6 +52,20 @@ class HandleInertiaRequests extends Middleware
             'navigation' => ModuleNavigation::for($request->user()),
             // Nombre de notifications non lues (pastille du menu), évalué à la demande.
             'unreadNotifications' => fn (): int => $request->user()?->unreadNotifications()->count() ?? 0,
+            // Panneau de la cloche : dernières notifications non lues (mêmes données que la page Notifications).
+            'recentNotifications' => fn (): array => $request->user() === null ? [] : $request->user()
+                ->unreadNotifications()
+                ->latest()
+                ->limit(6)
+                ->get()
+                ->map(fn ($n): array => [
+                    'id' => $n->id,
+                    'title' => data_get($n->data, 'title', ''),
+                    'body' => data_get($n->data, 'body', ''),
+                    'href' => data_get($n->data, 'href', '/notifications'),
+                ])
+                ->values()
+                ->all(),
             // Sélecteur de profil de la démo : uniquement en environnement local.
             'demo' => app()->isLocal() ? [
                 'current' => $request->user()?->getRoleNames()->first(),

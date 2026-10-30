@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Administration\ActivityController;
+use App\Http\Controllers\Administration\HomeController;
 use App\Http\Controllers\Administration\MatrixController;
 use App\Http\Controllers\Administration\OrganizationController;
 use App\Http\Controllers\Administration\RoleController;
@@ -14,6 +15,7 @@ Route::middleware(['auth', 'verified', 'can:administration.view'])
     ->prefix('administration')
     ->name('administration.')
     ->group(function () {
+        Route::get('/', HomeController::class)->name('home');
         Route::resource('users', UserController::class)->except(['show', 'destroy']);
         Route::patch('users/{user}/deactivate', [UserController::class, 'deactivate'])->name('users.deactivate');
         Route::patch('users/{user}/reactivate', [UserController::class, 'reactivate'])->name('users.reactivate');

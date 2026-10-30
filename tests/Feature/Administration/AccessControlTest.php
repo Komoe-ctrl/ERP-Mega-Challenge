@@ -45,7 +45,7 @@ it('cache le menu Administration à un utilisateur sans droit', function () {
 });
 
 it('affiche le menu Administration à un administrateur', function () {
-    $this->actingAs(adminUser())->get(route('dashboard'))
+    $this->actingAs(adminUser())->get(route('administration.home'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('navigation', 1)
@@ -56,12 +56,12 @@ it('affiche le menu Administration à un administrateur', function () {
 it('n\'affiche pas un module désactivé même si le droit existe', function () {
     config(['erp.modules_enabled' => []]);
 
-    $this->actingAs(adminUser())->get(route('dashboard'))
+    $this->actingAs(adminUser())->get(route('administration.home'))
         ->assertInertia(fn (Assert $page) => $page->where('navigation', []));
 });
 
 it('expose les rôles et permissions de l\'utilisateur à l\'interface', function () {
-    $this->actingAs(adminUser())->get(route('dashboard'))
+    $this->actingAs(adminUser())->get(route('administration.home'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('auth.roles', ['administrateur'])
             ->where('auth.permissions', fn ($permissions) => collect($permissions)->contains('administration.update')));

@@ -35,4 +35,13 @@ final class RoleHome
 
         return '/dashboard';
     }
+
+    /** Le compte voit-il au moins un module métier (hors Administration) ? */
+    public static function hasBusinessAccess(User $user): bool
+    {
+        return $user->getAllPermissions()->contains(
+            fn ($permission): bool => str_ends_with($permission->name, '.view')
+                && ! str_starts_with($permission->name, 'administration.'),
+        );
+    }
 }

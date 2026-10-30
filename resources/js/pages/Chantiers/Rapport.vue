@@ -163,7 +163,7 @@ const fieldClass =
                 <Button
                     type="submit"
                     size="lg"
-                    class="flex-[2] bg-brand text-brand-foreground hover:bg-brand/90"
+                    class="flex-[2] bg-cta text-cta-foreground hover:bg-cta/90"
                     :disabled="form.processing || alreadySent"
                 >
                     Envoyer le rapport

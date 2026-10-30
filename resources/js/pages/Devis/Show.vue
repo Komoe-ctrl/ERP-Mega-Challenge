@@ -419,7 +419,7 @@ function createContract() {
                 ><Printer /> Imprimer / PDF</Button
             >
             <article
-                class="print-area mx-auto w-full max-w-3xl space-y-6 rounded-xl border bg-white p-8 text-[#1b1e21] shadow-xs"
+                class="print-area mx-auto w-full max-w-3xl space-y-6 rounded-xl border bg-white p-8 text-ink shadow-xs"
             >
                 <header
                     class="flex items-start justify-between gap-4 border-b-2 border-brand pb-4"
@@ -441,7 +441,7 @@ function createContract() {
                 </section>
                 <table class="w-full text-sm">
                     <thead>
-                        <tr class="bg-[#003366] text-left text-white">
+                        <tr class="bg-brand text-left text-white">
                             <th class="p-2 font-medium">Désignation</th>
                             <th class="p-2 font-medium">U</th>
                             <th class="p-2 text-right font-medium">Qté</th>
@@ -497,7 +497,7 @@ function createContract() {
                         <dd>{{ fcfa(totals.ttc) }}</dd>
                     </div>
                 </dl>
-                <footer class="border-t pt-3 text-xs text-[#4a4e52]">
+                <footer class="border-t pt-3 text-xs text-muted-foreground">
                     Devis valable 30 jours. Mega Challenge — Abidjan, Côte
                     d’Ivoire.
                 </footer>

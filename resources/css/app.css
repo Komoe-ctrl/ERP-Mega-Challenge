@@ -7,6 +7,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Charte Mega Challenge : tokens de couleur (utilitaires bg-ink, text-paper, border-line…).
+   `cta` est l'orange d'action (« accent » dans la charte) : le nom `accent` est déjà pris
+   par le token shadcn de surface de survol. */
+@theme {
+    --color-brand: #0057b5;
+    --color-brand-foreground: #ffffff;
+    --color-cta: #c2410c;
+    --color-cta-foreground: #ffffff;
+    --color-ink: #1b1e21;
+    --color-paper: #f7f5f2;
+    --color-concrete: #ece8e2;
+    --color-line: #d6d0c7;
+    --color-field: #8a857d;
+    --color-on-dark: #d5d0c8;
+}
+
 @theme inline {
     /* Polices de la marque (site Mega Challenge) : Archivo pour le texte,
        Space Grotesk pour les titres et les chiffres. */
@@ -48,9 +64,7 @@
     --color-input: var(--input);
     --color-ring: var(--ring);
 
-    /* Orange d'action de la marque et couleurs de statut de l'ERP. */
-    --color-brand: var(--brand);
-    --color-brand-foreground: var(--brand-foreground);
+    /* Teintes dérivées du bleu de marque et couleurs de statut de l'ERP. */
     --color-brand-strong: var(--brand-strong);
     --color-brand-soft: var(--brand-soft);
     --color-success: var(--success);
@@ -89,7 +103,7 @@
     ::before,
     ::backdrop,
     ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
+        border-color: var(--color-line, currentColor);
     }
 }
 
@@ -109,36 +123,32 @@
 }
 
 /*
-  Charte Mega Challenge
-  Source : dépôt Komoe-ctrl/mega-challenge, src/app/(frontend)/globals.css
-  (ink #1b1e21, paper #f7f5f2, concrete #ece8e2, line #d6d0c7, accent #ff6600,
-  accent-strong #b93b0b, royal #003366).
+  Charte Mega Challenge : brand #0057b5, accent (cta) #c2410c, ink #1b1e21, paper #f7f5f2,
+  concrete #ece8e2, line #d6d0c7, muted #4a4e52, field #8a857d, on-dark #d5d0c8.
 */
 :root {
-    --background: #f7f5f2;
-    --foreground: #1b1e21;
+    --background: var(--color-paper);
+    --foreground: var(--color-ink);
     --card: #ffffff;
-    --card-foreground: #1b1e21;
+    --card-foreground: var(--color-ink);
     --popover: #ffffff;
-    --popover-foreground: #1b1e21;
-    --primary: #003366;
-    --primary-foreground: #ffffff;
-    --secondary: #ece8e2;
-    --secondary-foreground: #1b1e21;
-    --muted: #ece8e2;
+    --popover-foreground: var(--color-ink);
+    --primary: var(--color-brand);
+    --primary-foreground: var(--color-brand-foreground);
+    --secondary: var(--color-concrete);
+    --secondary-foreground: var(--color-ink);
+    --muted: var(--color-concrete);
     --muted-foreground: #4a4e52;
-    --accent: #f3eee7;
-    --accent-foreground: #1b1e21;
+    --accent: var(--color-concrete);
+    --accent-foreground: var(--color-ink);
     --destructive: #b91c1c;
     --destructive-foreground: #ffffff;
-    --border: #e2dcd3;
-    --input: #d6d0c7;
-    --ring: #003366;
+    --border: var(--color-line);
+    --input: var(--color-field);
+    --ring: var(--color-brand);
 
-    --brand: #ff6600;
-    --brand-foreground: #1b1e21;
-    --brand-strong: #b93b0b;
-    --brand-soft: #fce9de;
+    --brand-strong: color-mix(in srgb, var(--color-brand) 80%, var(--color-ink));
+    --brand-soft: color-mix(in srgb, var(--color-brand) 10%, white);
     --success: #15803d;
     --success-soft: #dcfce7;
     --warning: #b45309;
@@ -148,33 +158,36 @@
     --info: #003366;
     --info-soft: #dbeafe;
 
-    --chart-1: #003366;
-    --chart-2: #ff6600;
+    --chart-1: var(--color-brand);
+    --chart-2: var(--color-cta);
     --chart-3: #15803d;
     --chart-4: #b45309;
-    --chart-5: #8a857d;
+    --chart-5: var(--color-field);
     --radius: 0.625rem;
 
-    --sidebar-background: #1b1e21;
-    --sidebar-foreground: #d5d0c8;
-    --sidebar-primary: #ff6600;
-    --sidebar-primary-foreground: #1b1e21;
+    --sidebar-background: var(--color-ink);
+    --sidebar-foreground: var(--color-on-dark);
+    --sidebar-primary: var(--color-brand);
+    --sidebar-primary-foreground: var(--color-brand-foreground);
     --sidebar-accent: #2a2e32;
     --sidebar-accent-foreground: #ffffff;
     --sidebar-border: #3a3e42;
-    --sidebar-ring: #ff6600;
-    --sidebar: #1b1e21;
+    --sidebar-ring: var(--color-brand);
+    --sidebar: var(--color-ink);
 }
 
 .dark {
+    --color-brand: color-mix(in srgb, #0057b5 55%, white);
+    --color-brand-foreground: #1b1e21;
+
     --background: #14161a;
     --foreground: #f7f5f2;
     --card: #1b1e21;
     --card-foreground: #f7f5f2;
     --popover: #1b1e21;
     --popover-foreground: #f7f5f2;
-    --primary: #ff6600;
-    --primary-foreground: #1b1e21;
+    --primary: var(--color-brand);
+    --primary-foreground: var(--color-brand-foreground);
     --secondary: #2a2e32;
     --secondary-foreground: #f7f5f2;
     --muted: #2a2e32;
@@ -185,12 +198,10 @@
     --destructive-foreground: #ffffff;
     --border: #3a3e42;
     --input: #3a3e42;
-    --ring: #ff6600;
+    --ring: var(--color-brand);
 
-    --brand: #ff6600;
-    --brand-foreground: #1b1e21;
-    --brand-strong: #ff8a3d;
-    --brand-soft: #3a2a20;
+    --brand-strong: color-mix(in srgb, var(--color-brand) 80%, white);
+    --brand-soft: color-mix(in srgb, var(--color-brand) 20%, var(--color-ink));
     --success: #4ade80;
     --success-soft: #14301f;
     --warning: #fbbf24;
@@ -200,20 +211,20 @@
     --info: #7db4ff;
     --info-soft: #14284a;
 
-    --chart-1: #7db4ff;
-    --chart-2: #ff6600;
+    --chart-1: var(--color-brand);
+    --chart-2: var(--color-cta);
     --chart-3: #4ade80;
     --chart-4: #fbbf24;
     --chart-5: #b9b4ac;
 
     --sidebar-background: #101215;
     --sidebar-foreground: #d5d0c8;
-    --sidebar-primary: #ff6600;
-    --sidebar-primary-foreground: #1b1e21;
+    --sidebar-primary: var(--color-brand);
+    --sidebar-primary-foreground: var(--color-brand-foreground);
     --sidebar-accent: #23272b;
     --sidebar-accent-foreground: #ffffff;
     --sidebar-border: #2a2e32;
-    --sidebar-ring: #ff6600;
+    --sidebar-ring: var(--color-brand);
     --sidebar: #101215;
 }
 
@@ -249,4 +260,10 @@
         border: 0;
         box-shadow: none;
     }
+}
+
+/* La feuille imprimée reste claire même en thème sombre : on réinitialise le bleu de marque. */
+.print-area {
+    --color-brand: #0057b5;
+    --color-brand-foreground: #ffffff;
 }

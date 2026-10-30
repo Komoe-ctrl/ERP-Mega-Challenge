@@ -460,7 +460,7 @@ const field =
                     >
                     <Button
                         size="lg"
-                        class="flex-1 bg-brand text-brand-foreground hover:bg-brand/90 sm:flex-none"
+                        class="flex-1 bg-cta text-cta-foreground hover:bg-cta/90 sm:flex-none"
                         @click="save(true)"
                         >Soumettre</Button
                     >

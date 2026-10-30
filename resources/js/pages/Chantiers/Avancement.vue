@@ -183,7 +183,7 @@ function submit() {
                 </Button>
                 <Button
                     size="lg"
-                    class="flex-[2] bg-brand text-brand-foreground hover:bg-brand/90"
+                    class="flex-[2] bg-cta text-cta-foreground hover:bg-cta/90"
                     :disabled="!changed.length"
                     @click="submit"
                 >

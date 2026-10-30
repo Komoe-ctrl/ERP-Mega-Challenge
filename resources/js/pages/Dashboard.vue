@@ -196,7 +196,7 @@ const alertCount = computed(
                 <Button
                     v-if="can('chantiers.update') && terrain.primaryChantierId"
                     size="lg"
-                    class="h-16 flex-col gap-1 bg-brand text-brand-foreground hover:bg-brand/90"
+                    class="h-16 flex-col gap-1 bg-cta text-cta-foreground hover:bg-cta/90"
                     as-child
                 >
                     <Link

@@ -189,7 +189,7 @@ const field =
                     </div>
                     <Button
                         size="lg"
-                        class="bg-brand text-brand-foreground hover:bg-brand/90"
+                        class="bg-cta text-cta-foreground hover:bg-cta/90"
                         :disabled="!present.length"
                         @click="submit"
                         >Enregistrer le pointage</Button

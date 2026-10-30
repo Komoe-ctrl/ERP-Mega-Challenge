@@ -27,6 +27,8 @@ declare module '@inertiajs/core' {
             } | null;
             /** Nombre de notifications non lues de l'utilisateur connecté. */
             unreadNotifications: number;
+            /** Pointage du jour de l'utilisateur connecté (null si non connecté). */
+            attendance: { today: string; arrivedAt: string | null } | null;
             recentNotifications: {
                 id: string;
                 title: string;

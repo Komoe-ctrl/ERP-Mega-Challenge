@@ -10,12 +10,13 @@ export type User = {
     [key: string]: unknown;
 };
 
-export type Poste = { title: string; service: string };
+export type Poste = { id: number | null; title: string; service: string };
 
 export type Auth = {
     user: User;
     roles: string[];
     poste: Poste | null;
+    postes: Poste[];
     permissions: string[];
 };
 

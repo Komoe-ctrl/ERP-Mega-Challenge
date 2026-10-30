@@ -8,6 +8,7 @@ import {
     ClipboardList,
     Package,
     Wrench,
+    ShieldAlert,
 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
@@ -60,6 +61,7 @@ const meta: Record<NotificationKind, { icon: typeof Bell; tone: Tone }> = {
     stock: { icon: Package, tone: 'warning' },
     engin: { icon: Wrench, tone: 'info' },
     echeance: { icon: CalendarClock, tone: 'info' },
+    securite: { icon: ShieldAlert, tone: 'danger' },
 };
 
 // Ouvrir une notification la marque comme lue, puis mène à l'objet concerné.

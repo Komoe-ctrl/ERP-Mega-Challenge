@@ -193,7 +193,8 @@ export type NotificationKind =
     | 'planning'
     | 'stock'
     | 'engin'
-    | 'echeance';
+    | 'echeance'
+    | 'securite';
 
 export type AppNotification = {
     id: Id;

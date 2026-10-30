@@ -1,8 +1,5 @@
 <?php
 
-use App\Domain\Administration\Models\Role;
-use App\Domain\Shared\Enums\Module;
-use App\Domain\Shared\Enums\PermissionAction;
 use App\Domain\Shared\Enums\RoleName;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -123,23 +120,6 @@ Route::middleware(['auth', 'verified', 'can:finance.view'])->prefix('finance')->
 Route::middleware(['auth', 'verified', 'can:budget.view'])->prefix('budget')->name('budget.')->group(function () {
     Route::inertia('/', 'Budget/Index')->name('index');
     Route::get('{id}', fn (int $id) => Inertia::render('Budget/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
-
-// --- V1 : Administration (écrans complémentaires aux utilisateurs/rôles) ---
-Route::middleware(['auth', 'verified', 'can:administration.view'])->prefix('administration')->name('administration.')->group(function () {
-    Route::inertia('organisation', 'Administration/Organisation')->name('organisation');
-    Route::inertia('parametres', 'Administration/Parametres')->name('parametres');
-    Route::inertia('journal', 'Administration/Journal')->name('journal');
-    // Matrice rôles x permissions : données réelles (base), lecture seule.
-    Route::get('matrice', fn () => Inertia::render('Administration/Matrice', [
-        'roles' => Role::query()->with('permissions')->orderBy('id')->get()->map(fn (Role $r): array => [
-            'name' => $r->name,
-            'label' => $r->label(),
-            'permissions' => $r->permissions->pluck('name')->values()->all(),
-        ])->values(),
-        'modules' => array_map(fn (Module $m): array => ['value' => $m->value, 'label' => $m->label()], Module::cases()),
-        'actions' => array_map(fn (PermissionAction $a): array => ['value' => $a->value, 'label' => $a->label()], PermissionAction::cases()),
-    ]))->name('matrice');
 });
 
 /*

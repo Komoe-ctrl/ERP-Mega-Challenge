@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { h } from 'vue';
+import ActivityController from '@/actions/App/Http/Controllers/Administration/ActivityController';
 import DataTable from '@/components/DataTable.vue';
 import AdminNav from '@/components/erp/AdminNav.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { badgeCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateTimeFr } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { activityLog } from '@/mocks/transverse';
+import type { Paginated } from '@/types';
 import type { ActivityEntry } from '@/types/erp';
+
+const props = defineProps<{
+    entries: Paginated<ActivityEntry>;
+    filters: { event: string; actor: string };
+    actors: { value: string; label: string }[];
+}>();
 
 defineOptions({
     layout: {
@@ -26,11 +34,10 @@ const columns: DataTableColumn<ActivityEntry>[] = [
         header: 'Date',
         cell: ({ row }) => dateTimeFr(row.original.date.replace(' ', 'T')),
     },
-    { accessorKey: 'actor', header: 'Auteur', filterFn: 'equalsString' },
+    { accessorKey: 'actor', header: 'Auteur' },
     {
         accessorKey: 'event',
         header: 'Événement',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('activity', row.original.event),
     },
     { accessorKey: 'subject', header: 'Objet' },
@@ -61,24 +68,14 @@ const columns: DataTableColumn<ActivityEntry>[] = [
     },
 ];
 
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'event',
-        label: 'Événement',
-        options: Object.entries(statuses.activity).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
-    },
-    {
-        columnId: 'actor',
-        label: 'Auteur',
-        options: [...new Set(activityLog.map((a) => a.actor))].map((a) => ({
-            value: a,
-            label: a,
-        })),
-    },
-];
+// Filtres appliqués par le serveur : le journal peut compter des milliers de lignes.
+function filter(name: 'event' | 'actor', value: string) {
+    router.get(
+        ActivityController.index.url(),
+        { ...props.filters, [name]: value || undefined },
+        { preserveState: true, replace: true },
+    );
+}
 </script>
 
 <template>
@@ -90,11 +87,45 @@ const filters: DataTableFilter[] = [
             description="Toute création, modification, validation ou suppression : auteur, date, valeurs avant et après. Non modifiable."
         />
         <AdminNav />
+        <div class="flex flex-wrap gap-3">
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par événement"
+                :value="filters.event"
+                @change="
+                    filter('event', ($event.target as HTMLSelectElement).value)
+                "
+            >
+                <option value="">Tous les événements</option>
+                <option
+                    v-for="(meta, value) in statuses.activity"
+                    :key="value"
+                    :value="value"
+                >
+                    {{ meta.label }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par auteur"
+                :value="filters.actor"
+                @change="
+                    filter('actor', ($event.target as HTMLSelectElement).value)
+                "
+            >
+                <option value="">Tous les auteurs</option>
+                <option v-for="a in actors" :key="a.value" :value="a.value">
+                    {{ a.label }}
+                </option>
+            </select>
+        </div>
         <DataTable
             :columns="columns"
-            :data="activityLog"
-            :filters="filters"
-            search-placeholder="Rechercher dans le journal…"
+            :data="entries.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucune activité enregistrée."
         />
+        <PaginationBar :page="entries" />
     </div>
 </template>

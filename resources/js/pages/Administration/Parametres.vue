@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import SettingController from '@/actions/App/Http/Controllers/Administration/SettingController';
 import AdminNav from '@/components/erp/AdminNav.vue';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -11,7 +12,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import { dateFr } from '@/lib/format';
-import { fiscalYears, settingGroups } from '@/mocks/transverse';
+import type { SettingGroup } from '@/types/erp';
+
+type FiscalYearRow = {
+    id: number;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    status: 'open' | 'closed';
+};
+
+const props = defineProps<{
+    settingGroups: SettingGroup[];
+    fiscalYears: FiscalYearRow[];
+}>();
 
 defineOptions({
     layout: {
@@ -27,15 +41,17 @@ const canEdit = computed(() => can('administration.update'));
 
 const values = reactive<Record<string, string>>(
     Object.fromEntries(
-        settingGroups.flatMap((g) => g.items.map((i) => [i.key, i.value])),
+        props.settingGroups.flatMap((g) =>
+            g.items.map((i) => [i.key, i.value]),
+        ),
     ),
 );
 const errors = ref<Record<string, string>>({});
 
-// Contrôle des valeurs selon l'unité : pourcentages 0-100, montants et durées entiers positifs.
+// Le client contrôle la saisie pour le confort ; le serveur refait toute la validation.
 function check(key: string, unit: string | undefined, value: string): string {
     if (key.startsWith('numbering.')) {
-        return /\{SEQ:\d+\}/.test(value)
+        return /{SEQ:d+}/.test(value)
             ? ''
             : 'Le format doit contenir un compteur, ex. {SEQ:5}.';
     }
@@ -44,7 +60,7 @@ function check(key: string, unit: string | undefined, value: string): string {
         return '';
     }
 
-    if (!/^\d+([.,]\d+)?$/.test(value.trim())) {
+    if (!/^d+([.,]d+)?$/.test(value.trim())) {
         return 'Saisissez un nombre positif.';
     }
 
@@ -71,7 +87,7 @@ function check(key: string, unit: string | undefined, value: string): string {
 function save() {
     errors.value = {};
 
-    for (const g of settingGroups) {
+    for (const g of props.settingGroups) {
         for (const i of g.items) {
             const message = check(i.key, i.unit, values[i.key]);
 
@@ -87,12 +103,28 @@ function save() {
         return;
     }
 
-    toast.success(
-        'Paramètres enregistrés (maquette). Ils s’appliquent immédiatement, sans développement.',
+    router.put(
+        SettingController.update.url(),
+        { values: { ...values } },
+        {
+            preserveScroll: true,
+            onError: (serverErrors) => {
+                // Les points des clés sont encodés en « __ » dans les erreurs.
+                for (const [field, message] of Object.entries(serverErrors)) {
+                    errors.value[
+                        field.replace('values.', '').replaceAll('__', '.')
+                    ] = message;
+                }
+
+                toast.error(
+                    'Corrigez les valeurs signalées avant d’enregistrer.',
+                );
+            },
+        },
     );
 }
 
-const years = ref(fiscalYears.map((f) => ({ ...f })));
+const years = computed(() => props.fiscalYears);
 const closing = ref<number | null>(null);
 const closeOpen = computed({
     get: () => closing.value !== null,
@@ -101,13 +133,12 @@ const closeOpen = computed({
     },
 });
 
-function close() {
-    const year = years.value.find((y) => y.id === closing.value);
-
-    if (year) {
-        year.status = 'closed';
-        toast.success(
-            `Exercice ${year.label} clôturé : il passe en lecture seule (RG1.4).`,
+function close(reason: string) {
+    if (closing.value !== null) {
+        router.patch(
+            SettingController.closeFiscalYear.url(closing.value),
+            { reason },
+            { preserveScroll: true },
         );
     }
 }

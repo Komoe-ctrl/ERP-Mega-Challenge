@@ -21,6 +21,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string $code
  * @property string $name
  * @property bool $is_active
+ * @property int|null $users_count Présent après `withCount('users')`.
  */
 #[Fillable(['code', 'name', 'is_active'])]
 #[UsePolicy(ServicePolicy::class)]

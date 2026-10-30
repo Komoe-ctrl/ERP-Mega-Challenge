@@ -373,8 +373,10 @@ const field =
                         validation de la Direction requise.</span
                     >
                 </p>
-                <div class="flex items-center gap-2">
-                    <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div
+                        class="flex w-full items-baseline justify-between gap-2 sm:w-auto sm:flex-1 sm:flex-col sm:justify-start"
+                    >
                         <p class="text-xs text-muted-foreground">
                             Total de la demande
                         </p>
@@ -384,15 +386,23 @@ const field =
                             {{ fcfa(total) }}
                         </p>
                     </div>
-                    <Button variant="outline" size="lg" as-child
+                    <Button
+                        variant="outline"
+                        size="lg"
+                        class="flex-1 sm:flex-none"
+                        as-child
                         ><Link href="/achats/demandes">Annuler</Link></Button
                     >
-                    <Button variant="secondary" size="lg" @click="save(false)"
+                    <Button
+                        variant="secondary"
+                        size="lg"
+                        class="flex-1 sm:flex-none"
+                        @click="save(false)"
                         >Brouillon</Button
                     >
                     <Button
                         size="lg"
-                        class="bg-brand text-brand-foreground hover:bg-brand/90"
+                        class="flex-1 bg-brand text-brand-foreground hover:bg-brand/90 sm:flex-none"
                         @click="save(true)"
                         >Soumettre</Button
                     >

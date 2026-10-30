@@ -13,6 +13,7 @@ use App\Domain\Budget\Models\BudgetCommitment;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Budget\Support\BudgetSummary;
 use App\Domain\Shared\Enums\RoleName;
+use App\Domain\Shared\Notifications\AlertDispatcher;
 use App\Domain\Shared\Support\BudgetLock;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -28,7 +29,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class DecidePurchaseRequest
 {
-    public function __construct(private readonly RequestRouting $routing) {}
+    public function __construct(
+        private readonly RequestRouting $routing,
+        private readonly AlertDispatcher $alerts,
+    ) {}
 
     /**
      * @param  array<int, float|int|string>  $adjustments  quantités ajustées par ligne de demande (RG8.5)
@@ -96,6 +100,7 @@ final class DecidePurchaseRequest
                     'action' => 'Validée',
                     'reason' => 'Prix figés, engagement de '.number_format($total, 0, ',', ' ').' FCFA inscrit au budget',
                 ]);
+                $this->notifyRequester($request, $by, 'Demande validée', 'validée : prix figés et montant engagé sur le budget du chantier.');
 
                 return $request;
             },
@@ -104,12 +109,34 @@ final class DecidePurchaseRequest
 
     public function refuse(PurchaseRequest $request, User $by, string $reason): PurchaseRequest
     {
-        return $this->close($request, $by, Refusee::class, 'Refusée', $reason);
+        $this->close($request, $by, Refusee::class, 'Refusée', $reason);
+        $this->notifyRequester($request, $by, 'Demande refusée', 'refusée : '.trim($reason));
+
+        return $request;
     }
 
     public function sendBack(PurchaseRequest $request, User $by, string $reason): PurchaseRequest
     {
-        return $this->close($request, $by, Renvoyee::class, 'Renvoyée pour correction', $reason);
+        $this->close($request, $by, Renvoyee::class, 'Renvoyée pour correction', $reason);
+        $this->notifyRequester($request, $by, 'Demande renvoyée pour correction', 'renvoyée pour correction : '.trim($reason));
+
+        return $request;
+    }
+
+    /** Décision sur une demande (validée, refusée, renvoyée) : le demandeur en est informé. */
+    private function notifyRequester(PurchaseRequest $request, User $by, string $title, string $outcome): void
+    {
+        $requester = User::query()->find($request->requester_id);
+
+        if ($requester instanceof User) {
+            $this->alerts->send(
+                [$requester],
+                'decision',
+                $title,
+                "{$request->number} {$outcome} (par {$by->name}).",
+                route('achats.demandes.show', $request, absolute: false),
+            );
+        }
     }
 
     /** @param class-string<RequestState> $target */

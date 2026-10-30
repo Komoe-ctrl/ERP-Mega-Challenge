@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Shared\Enums\RoleName;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -10,7 +11,10 @@ Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'logi
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');
-    Route::inertia('notifications', 'Notifications/Index')->name('notifications.index');
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('notifications/lues', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::put('notifications/canaux', [NotificationController::class, 'channels'])->name('notifications.channels');
+    Route::post('notifications/{id}/lue', [NotificationController::class, 'read'])->name('notifications.read');
 });
 
 /*

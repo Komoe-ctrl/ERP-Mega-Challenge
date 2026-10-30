@@ -25,6 +25,8 @@ declare module '@inertiajs/core' {
                 current: string | null;
                 roles: { value: string; label: string }[];
             } | null;
+            /** Nombre de notifications non lues de l'utilisateur connecté. */
+            unreadNotifications: number;
             sidebarOpen: boolean;
             [key: string]: unknown;
         };

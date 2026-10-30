@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Bell,
@@ -10,6 +10,8 @@ import {
     Wrench,
 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
+import { toast } from 'vue-sonner';
+import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import EmptyState from '@/components/erp/EmptyState.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import TabsNav from '@/components/erp/TabsNav.vue';
@@ -17,8 +19,22 @@ import { Button } from '@/components/ui/button';
 import { dateTimeFr } from '@/lib/format';
 import { toneClasses } from '@/lib/status';
 import type { Tone } from '@/lib/status';
-import { notifications } from '@/mocks/transverse';
 import type { NotificationKind } from '@/types/erp';
+
+type Item = {
+    id: string;
+    kind: NotificationKind;
+    title: string;
+    body: string;
+    date: string;
+    read: boolean;
+    href: string;
+};
+
+const props = defineProps<{
+    notifications: Item[];
+    channels: { app: boolean; email: boolean };
+}>();
 
 defineOptions({
     layout: {
@@ -26,12 +42,15 @@ defineOptions({
     },
 });
 
-const items = reactive(notifications.map((n) => ({ ...n })));
 const tab = ref('toutes');
 const shown = computed(() =>
-    tab.value === 'non_lues' ? items.filter((n) => !n.read) : items,
+    tab.value === 'non_lues'
+        ? props.notifications.filter((n) => !n.read)
+        : props.notifications,
 );
-const unread = computed(() => items.filter((n) => !n.read).length);
+const unread = computed(
+    () => props.notifications.filter((n) => !n.read).length,
+);
 
 const meta: Record<NotificationKind, { icon: typeof Bell; tone: Tone }> = {
     demande: { icon: ClipboardList, tone: 'warning' },
@@ -43,7 +62,39 @@ const meta: Record<NotificationKind, { icon: typeof Bell; tone: Tone }> = {
     echeance: { icon: CalendarClock, tone: 'info' },
 };
 
-const channels = reactive({ app: true, email: true });
+// Ouvrir une notification la marque comme lue, puis mène à l'objet concerné.
+function open(n: Item) {
+    router.post(
+        NotificationController.read.url(n.id),
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => router.visit(n.href),
+        },
+    );
+}
+
+function readAll() {
+    router.post(
+        NotificationController.readAll.url(),
+        {},
+        { preserveScroll: true },
+    );
+}
+
+// Canaux de réception paramétrables par utilisateur : application et e-mail.
+const channels = reactive({ ...props.channels });
+
+function saveChannels() {
+    router.put(
+        NotificationController.channels.url(),
+        { ...channels },
+        {
+            preserveScroll: true,
+            onError: (errors) => toast.error(Object.values(errors)[0]),
+        },
+    );
+}
 </script>
 
 <template>
@@ -54,11 +105,7 @@ const channels = reactive({ app: true, email: true });
             title="Notifications"
             description="Une même alerte n’est pas renvoyée plus d’une fois par jour."
         >
-            <Button
-                variant="outline"
-                :disabled="!unread"
-                @click="items.forEach((n) => (n.read = true))"
-            >
+            <Button variant="outline" :disabled="!unread" @click="readAll">
                 Tout marquer comme lu
             </Button>
         </PageHeader>
@@ -66,24 +113,27 @@ const channels = reactive({ app: true, email: true });
         <TabsNav
             v-model="tab"
             :tabs="[
-                { key: 'toutes', label: 'Toutes', count: items.length },
+                { key: 'toutes', label: 'Toutes', count: notifications.length },
                 { key: 'non_lues', label: 'Non lues', count: unread },
             ]"
         />
 
         <ul v-if="shown.length" class="space-y-2">
             <li v-for="n in shown" :key="n.id">
-                <Link
-                    :href="n.href"
-                    class="flex gap-3 rounded-xl border bg-card p-3 shadow-xs hover:bg-accent"
+                <button
+                    type="button"
+                    class="flex w-full gap-3 rounded-xl border bg-card p-3 text-left shadow-xs hover:bg-accent"
                     :class="n.read ? 'opacity-80' : 'border-l-4 border-l-brand'"
-                    @click="n.read = true"
+                    @click="open(n)"
                 >
                     <span
                         class="flex size-9 shrink-0 items-center justify-center rounded-lg"
-                        :class="toneClasses[meta[n.kind].tone]"
+                        :class="toneClasses[meta[n.kind]?.tone ?? 'neutral']"
                     >
-                        <component :is="meta[n.kind].icon" class="size-5" />
+                        <component
+                            :is="meta[n.kind]?.icon ?? Bell"
+                            class="size-5"
+                        />
                     </span>
                     <span class="min-w-0">
                         <span
@@ -99,7 +149,7 @@ const channels = reactive({ app: true, email: true });
                             >{{ dateTimeFr(n.date.replace(' ', 'T')) }}</span
                         >
                     </span>
-                </Link>
+                </button>
             </li>
         </ul>
         <EmptyState
@@ -111,7 +161,12 @@ const channels = reactive({ app: true, email: true });
         <section class="rounded-xl border bg-card p-4 shadow-xs">
             <h2 class="mb-2 font-display font-semibold">Canaux de réception</h2>
             <label class="flex items-center gap-2 py-1 text-sm">
-                <input v-model="channels.app" type="checkbox" class="size-4" />
+                <input
+                    v-model="channels.app"
+                    type="checkbox"
+                    class="size-4"
+                    @change="saveChannels"
+                />
                 Centre de notifications de l’application
             </label>
             <label class="flex items-center gap-2 py-1 text-sm">
@@ -119,6 +174,7 @@ const channels = reactive({ app: true, email: true });
                     v-model="channels.email"
                     type="checkbox"
                     class="size-4"
+                    @change="saveChannels"
                 />
                 E-mail
             </label>

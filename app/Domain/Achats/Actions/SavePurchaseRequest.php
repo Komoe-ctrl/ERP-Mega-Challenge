@@ -10,6 +10,9 @@ use App\Domain\Achats\States\EnAttente;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Budget\Support\BudgetSummary;
 use App\Domain\Chantiers\Models\Chantier;
+use App\Domain\Shared\Enums\RoleName;
+use App\Domain\Shared\Notifications\AlertDispatcher;
+use App\Domain\Shared\Notifications\AlertRecipients;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,7 +24,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class SavePurchaseRequest
 {
-    public function __construct(private readonly RequestRouting $routing) {}
+    public function __construct(
+        private readonly RequestRouting $routing,
+        private readonly AlertDispatcher $alerts,
+    ) {}
 
     /**
      * @param  array{chantier_id: int, budget_line_id: int|null, justification: string|null, lines: list<array{article_id: int, quantity: float|int|string, need_date: string, urgency: string}>}  $data
@@ -89,6 +95,27 @@ final class SavePurchaseRequest
             'action' => 'Soumise pour validation',
             'reason' => $request->needs_direction ? 'Validation de la Direction requise (budget ou seuil dépassé)' : null,
         ]);
+        $this->notifyValidators($request, $by);
+    }
+
+    /** Nouvelle demande à valider : valideurs du chantier, et Direction si son circuit l'exige (RG8.7). */
+    private function notifyValidators(PurchaseRequest $request, User $by): void
+    {
+        $chantier = $request->site();
+        $recipients = AlertRecipients::onChantier($chantier, Chantier::ROLE_CONDUCTEUR);
+
+        if ($request->needs_direction) {
+            $recipients = $recipients->merge(AlertRecipients::withRoles(RoleName::DirectionGenerale));
+        }
+
+        $this->alerts->send(
+            $recipients,
+            'demande',
+            'Nouvelle demande à valider',
+            "{$request->number} — {$chantier->name} ({$by->name}), ".number_format($request->total_amount, 0, ',', ' ').' FCFA.',
+            route('achats.demandes.show', $request, absolute: false),
+            except: $by,
+        );
     }
 
     /**

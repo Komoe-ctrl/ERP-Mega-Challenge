@@ -2,7 +2,7 @@
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Administration/UserController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/erp/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,7 +55,7 @@ const selectClass =
     <Head :title="title" />
 
     <div class="mx-auto w-full max-w-2xl space-y-6 p-4">
-        <Heading
+        <PageHeader
             :title="title"
             description="Un compte est désactivé, jamais supprimé, afin de conserver l’historique."
         />

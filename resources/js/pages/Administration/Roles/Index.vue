@@ -4,7 +4,7 @@ import { h } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Administration/RoleController';
 import DataTable from '@/components/DataTable.vue';
 import AdminNav from '@/components/erp/AdminNav.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/erp/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { DataTableColumn } from '@/lib/dataTable';
@@ -77,7 +77,7 @@ const columns: DataTableColumn<RoleRow>[] = [
 
     <div class="space-y-4 p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
-            <Heading
+            <PageHeader
                 title="Rôles et droits"
                 description="Les 10 profils de l’ERP et leurs permissions par module."
             />

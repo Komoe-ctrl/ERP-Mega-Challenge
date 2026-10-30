@@ -96,7 +96,7 @@ export const notifications: AppNotification[] = [
         body: 'FAC-F-2026-091 (Sotraci Matériaux) : échéance le 31/10/2026.',
         date: '2026-10-17 07:00',
         read: true,
-        href: '/fournisseurs/factures',
+        href: '/achats/factures',
     },
 ];
 

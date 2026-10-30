@@ -2,7 +2,7 @@
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Administration/RoleController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/erp/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,7 +46,7 @@ defineOptions({
     <Head :title="title" />
 
     <div class="mx-auto w-full max-w-4xl space-y-6 p-4">
-        <Heading
+        <PageHeader
             :title="title"
             description="Les droits sont définis par module et par action. Ils s’appliquent immédiatement, sans développement."
         />

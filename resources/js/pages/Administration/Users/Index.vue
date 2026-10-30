@@ -4,7 +4,7 @@ import { h, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Administration/UserController';
 import DataTable from '@/components/DataTable.vue';
 import AdminNav from '@/components/erp/AdminNav.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/erp/PageHeader.vue';
 import PaginationBar from '@/components/PaginationBar.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -142,7 +142,7 @@ const columns: DataTableColumn<UserRow>[] = [
 
     <div class="space-y-4 p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
-            <Heading
+            <PageHeader
                 title="Utilisateurs"
                 description="Comptes, rôles et affectations. Un compte est désactivé, jamais supprimé."
             />

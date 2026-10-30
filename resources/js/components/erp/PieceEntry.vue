@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { Check, FileDown, Plus, Printer, Search, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
@@ -29,6 +30,7 @@ const props = defineProps<{
     onlyStatus?: PieceStatus[];
 }>();
 
+const page = usePage();
 const { poste } = useLegacySession();
 const label = pieceKindLabels[props.kind];
 
@@ -131,7 +133,9 @@ const nextStep = computed(() => {
     return defaultWorkflow[status === 'saisie' ? 1 : 2] ?? null;
 });
 const canAdvance = computed(
-    () => nextStep.value !== null && nextStep.value.title === poste.value.title,
+    () =>
+        nextStep.value !== null &&
+        nextStep.value.roles.some((r) => page.props.auth.roles.includes(r)),
 );
 
 const statusTone: Record<

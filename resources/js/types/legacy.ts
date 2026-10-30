@@ -15,6 +15,8 @@ export type PieceStatus = 'saisie' | 'validee' | 'approuvee' | 'rejetee';
 export type WorkflowStep = {
     id: number;
     label: string;
+    /** Rôles du compte habilités à franchir cette étape. */
+    roles: string[];
     /** Titre (poste) habilité à franchir cette étape. */
     title: string;
     /** Libellé du bouton d'action, nommé d'après le niveau suivant. */

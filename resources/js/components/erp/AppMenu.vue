@@ -75,6 +75,7 @@ watch(groupOfActive, (key) => {
                 <SidebarMenuItem>
                     <CollapsibleTrigger as-child>
                         <SidebarMenuButton>
+                            <component :is="g.icon" />
                             <span>{{ g.label }}</span>
                             <ChevronRight
                                 class="ml-auto transition-transform"

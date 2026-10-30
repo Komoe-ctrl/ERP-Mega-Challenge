@@ -1,4 +1,17 @@
 /** Menus de l'application : un seul menu latéral (accordéon), le menu du haut et le menu Fichier. */
+import {
+    BookOpen,
+    HandCoins,
+    Handshake,
+    HardHat,
+    Receipt,
+    Settings,
+    ShoppingCart,
+    Users,
+    Wallet,
+    Warehouse,
+} from '@lucide/vue';
+import type { Component } from 'vue';
 
 export type LegacyLink = {
     label: string;
@@ -17,6 +30,7 @@ export type MenuItem = {
 export type MenuGroup = {
     key: string;
     label: string;
+    icon: Component;
     items: MenuItem[];
 };
 
@@ -32,6 +46,7 @@ const e = (label: string, slug: string, permission: string): MenuItem => ({
 export const sidebarMenu: MenuGroup[] = [
     {
         key: 'projets',
+        icon: HardHat,
         label: 'Projets et chantiers',
         items: [
             { label: 'Projets', href: '/projets', permission: 'projets.view' },
@@ -50,6 +65,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'da',
+        icon: ShoppingCart,
         label: "Demandes d'achats (D.A.)",
         items: [
             {
@@ -102,6 +118,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'nf',
+        icon: Receipt,
         label: 'Notes de frais',
         items: [
             e('Note de frais', 'note-de-frais', 'achats.view'),
@@ -112,6 +129,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'commercial',
+        icon: Handshake,
         label: 'Commercial',
         items: [
             { label: 'Clients', href: '/clients', permission: 'clients.view' },
@@ -125,6 +143,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'recettes',
+        icon: HandCoins,
         label: 'Recettes',
         items: [
             {
@@ -139,6 +158,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'stocks',
+        icon: Warehouse,
         label: 'Stocks',
         items: [
             {
@@ -160,6 +180,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'ressources',
+        icon: Users,
         label: 'Ressources',
         items: [
             {
@@ -173,6 +194,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'tresorerie',
+        icon: Wallet,
         label: 'Trésorerie',
         items: [
             e('Entrée de caisse', 'entree-de-caisse', 'finance.view'),
@@ -189,6 +211,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'compta',
+        icon: BookOpen,
         label: 'Comptabilité générale',
         items: [
             e('Comptabilité générale', 'comptabilite-generale', 'finance.view'),
@@ -211,6 +234,7 @@ export const sidebarMenu: MenuGroup[] = [
     },
     {
         key: 'administration',
+        icon: Settings,
         label: 'Administration',
         items: [
             {

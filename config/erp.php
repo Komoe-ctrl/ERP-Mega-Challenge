@@ -41,6 +41,7 @@ return [
     'e2e' => [
         'email' => env('E2E_EMAIL'),
         'password' => env('E2E_PASSWORD'),
+        'totp_secret' => env('E2E_TOTP_SECRET'),
     ],
 
     'demo_admin' => [

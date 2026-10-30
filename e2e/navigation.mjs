@@ -1,14 +1,19 @@
 /**
- * Parcours de navigation : se connecte, puis clique sur chaque entrée du menu
- * latéral, du menu du haut, du menu Fichier et de la cloche de notifications.
- * Pour chaque page : elle s'ouvre, le titre (h1) correspond à l'entrée, aucune
- * erreur console, aucune réponse 5xx, et la page reste cliquable
- * (`pointer-events` du body) après l'ouverture/fermeture d'un menu déroulant.
+ * Parcours de navigation, pour un compte de chaque profil (et un compte qui voit
+ * tout). Pour chacun :
+ *  - la bonne page d'arrivée après la connexion (jamais les paramètres) ;
+ *  - le titre et le service du poste dans l'en-tête, sans logo, en-tête fixe ;
+ *  - l'accordéon : clic = ouverture, chevron qui pivote, une seule catégorie
+ *    ouverte, catégorie de la page courante ouverte, écran courant en évidence ;
+ *  - chaque entrée du menu latéral, du menu du haut, du menu Fichier et la
+ *    cloche : la page s'ouvre (pas de 403), le titre h1 correspond, aucune erreur
+ *    console, la page reste cliquable (`pointer-events` du body).
  *
- * Prérequis (local) : php artisan erp:e2e-user, puis depuis la racine du dépôt :
- *   docker compose exec -T laravel.test node e2e/navigation.mjs
+ * Prérequis (local) : php artisan erp:e2e-user (comptes e2e.<profil>@…), puis
+ *   docker compose exec -T laravel.test node e2e/navigation.mjs [profil…]
  * (playwright-core + chromium : npm i -D @playwright/test && npx playwright install --with-deps chromium)
  */
+import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
@@ -23,230 +28,404 @@ const env = Object.fromEntries(
             l.slice(l.indexOf('=') + 1).replace(/^"|"$/g, ''),
         ]),
 );
+const [local, domain] = env.E2E_EMAIL.split('@');
+
+/** Oracle indépendant du code : arrivée, poste et service attendus par profil. */
+const ROLES = {
+    administrateur: {
+        home: '/administration/users',
+        title: 'Administrateur',
+        service: 'Administration',
+    },
+    direction_generale: {
+        home: '/dashboard',
+        title: 'Directeur général',
+        service: 'Direction générale',
+    },
+    direction_technique: {
+        home: '/dashboard',
+        title: 'Directeur technique',
+        service: 'Direction technique',
+    },
+    service_achats_btp: {
+        home: '/achats/a-valider',
+        title: 'Responsable achats BTP',
+        service: 'Achats BTP',
+    },
+    conducteur_travaux: {
+        home: '/chantiers',
+        title: 'Conducteur de travaux',
+        service: 'Travaux',
+    },
+    chef_chantier: {
+        home: '/chantiers',
+        title: 'Chef de chantier',
+        service: 'Travaux',
+    },
+    magasinier: {
+        home: '/achats/receptions',
+        title: 'Magasinier',
+        service: 'Magasin',
+    },
+    comptabilite: {
+        home: '/achats/factures',
+        title: 'Comptable',
+        service: 'Comptabilité',
+    },
+    finance: {
+        home: '/ecrans/situation-caisse',
+        title: 'Responsable financier',
+        service: 'Finance',
+    },
+    ressources_humaines: {
+        home: '/rh',
+        title: 'Chargée des ressources humaines',
+        service: 'Ressources humaines',
+    },
+    complet: {
+        email: env.E2E_EMAIL,
+        home: null,
+        title: 'Testeur',
+        service: null,
+    },
+};
+
+function totp(secret) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = '';
+    for (const c of secret.toUpperCase().replace(/=+$/, '')) {
+        bits += alphabet.indexOf(c).toString(2).padStart(5, '0');
+    }
+    const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+    const h = createHmac('sha1', key).update(counter).digest();
+    const o = h[h.length - 1] & 15;
+    const n =
+        ((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+
+    return String(n % 1_000_000).padStart(6, '0');
+}
 
 const aliases = { 'Tableau de bord': 'bonjour' };
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const failures = [];
-let checked = 0;
+const SIDEBAR_BTN = '[data-sidebar="content"] [data-sidebar="menu-button"]';
+const SUB_BTN = '[data-sidebar="menu-sub-button"]';
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+const failures = [];
+const summary = [];
 
-let consoleErrors = [];
-page.on(
-    'console',
-    (m) => m.type() === 'error' && consoleErrors.push(m.text().slice(0, 200)),
-);
-page.on('pageerror', (e) => consoleErrors.push(`PAGEERROR ${e.message}`));
-page.on(
-    'response',
-    (r) =>
-        r.status() >= 500 &&
-        consoleErrors.push(`HTTP ${r.status()} ${r.url()}`),
-);
+async function runRole(name) {
+    const spec = ROLES[name];
+    const email = spec.email ?? `${local}.${name}@${domain}`;
+    const ctx = await browser.newContext({
+        viewport: { width: 1600, height: 900 },
+    });
+    const page = await ctx.newPage();
+    let errors = [];
+    let checked = 0;
+    const fail = (where, msg) => {
+        failures.push(`[${name}] ${where} → ${msg}`);
+        console.log(`  ✗ [${name}] ${where} → ${msg}`);
+    };
 
-async function settle() {
-    await page.waitForLoadState('networkidle').catch(() => {});
-    await page.waitForTimeout(300);
-}
+    page.on(
+        'console',
+        (m) => m.type() === 'error' && errors.push(m.text().slice(0, 200)),
+    );
+    page.on('pageerror', (e) => errors.push(`PAGEERROR ${e.message}`));
+    page.on('response', (r) => {
+        if (
+            r.status() >= 400 &&
+            r.request().resourceType() !== 'image' &&
+            !r.url().includes('/build/')
+        ) {
+            errors.push(`HTTP ${r.status()} ${r.url().replace(BASE, '')}`);
+        }
+    });
 
-/** Vérifie la page courante pour l'entrée `label` ouverte depuis `where`. */
-async function verify(where, label, expectedPath) {
-    checked++;
+    const settle = async () => {
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(250);
+    };
+    const go = (path) =>
+        page
+            .goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
+            .then(settle);
+    const waitPath = (path) =>
+        page
+            .waitForURL((u) => u.pathname === path, {
+                timeout: 30000,
+                waitUntil: 'commit',
+            })
+            .catch(() => {});
+
+    async function verify(where, label, expectedPath) {
+        checked++;
+        await settle();
+        const problems = [];
+        const path = new URL(page.url()).pathname;
+        if (expectedPath && path !== expectedPath)
+            problems.push(`URL ${path} ≠ ${expectedPath}`);
+        const h1 = (
+            await page
+                .locator('h1:visible')
+                .first()
+                .innerText({ timeout: 3000 })
+                .catch(() => '')
+        ).trim();
+        if (!h1) problems.push('aucun titre h1');
+        else {
+            const word =
+                aliases[label] ??
+                norm(label)
+                    .split(/[^a-z0-9]+/)
+                    .filter((w) => w.length >= 4)[0];
+            if (word && !norm(h1).includes(norm(word).slice(0, 5)))
+                problems.push(`titre « ${h1} » ≠ « ${label} »`);
+        }
+        if (
+            (await page.evaluate(
+                () => getComputedStyle(document.body).pointerEvents,
+            )) === 'none'
+        ) {
+            problems.push('body pointer-events: none');
+        }
+        if (errors.length) problems.push(`console : ${errors.join(' | ')}`);
+        errors = [];
+        if (problems.length) fail(`${where} › ${label}`, problems.join(' ; '));
+        else console.log(`  ✓ ${where} › ${label} — « ${h1} »`);
+    }
+
+    console.log(`\n=== ${name} (${email}) ===`);
+
+    // --- Connexion (+ double authentification si le profil l'impose) -----------
+    await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+    await page.fill('#email', email);
+    await page.fill('#password', env.E2E_PASSWORD);
+    await page.click('[data-test=login-button]');
+    await page.waitForURL((u) => !u.pathname.endsWith('/login'), {
+        timeout: 90000,
+        waitUntil: 'commit',
+    });
+    if (page.url().includes('two-factor-challenge')) {
+        await page.waitForLoadState('networkidle');
+        await page.locator('input').first().focus();
+        await page.keyboard.type(totp(env.E2E_TOTP_SECRET));
+        await page.locator('button[type=submit]').click();
+        await page.waitForURL(
+            (u) => !u.pathname.includes('two-factor-challenge'),
+            { timeout: 90000, waitUntil: 'commit' },
+        );
+    }
     await settle();
-    const problems = [];
-    const path = new URL(page.url()).pathname;
-    if (expectedPath && path !== expectedPath)
-        problems.push(`URL ${path} ≠ ${expectedPath}`);
-    const h1 = (
+    errors = [];
+
+    // --- Page d'arrivée --------------------------------------------------------
+    const landed = new URL(page.url()).pathname;
+    if (landed.startsWith('/settings') || landed.startsWith('/user/'))
+        fail('arrivée', `atterri sur ${landed}`);
+    else if (spec.home && landed !== spec.home)
+        fail('arrivée', `${landed} ≠ ${spec.home}`);
+    else console.log(`  ✓ arrivée sur ${landed}`);
+
+    // --- En-tête : poste, service, sans logo, fixe -----------------------------
+    await go('/dashboard');
+    const title = (
         await page
-            .locator('h1:visible')
-            .first()
-            .innerText({ timeout: 3000 })
+            .locator('[data-test="header-title"]')
+            .innerText()
             .catch(() => '')
     ).trim();
-    if (!h1) problems.push('aucun titre h1');
-    else {
-        const word = aliases[label] ?? norm(label)
-            .split(/[^a-z0-9]+/)
-            .filter((w) => w.length >= 4)[0];
-        if (word && !norm(h1).includes(word.slice(0, 5)))
-            problems.push(`titre « ${h1} » ne correspond pas à « ${label} »`);
-    }
-    const pe = await page.evaluate(
-        () => getComputedStyle(document.body).pointerEvents,
-    );
-    if (pe === 'none') problems.push('body pointer-events: none');
-    if (consoleErrors.length)
-        problems.push(`console : ${consoleErrors.join(' | ')}`);
-    consoleErrors = [];
-    if (problems.length)
-        failures.push(`[${where}] ${label} → ${problems.join(' ; ')}`);
+    const service = (
+        await page
+            .locator('[data-test="header-service"]')
+            .innerText()
+            .catch(() => '')
+    ).trim();
+    if (title !== spec.title)
+        fail('en-tête', `titre « ${title} » ≠ « ${spec.title} »`);
+    if (spec.service && service !== spec.service)
+        fail('en-tête', `service « ${service} » ≠ « ${spec.service} »`);
+    if ((await page.locator('[data-test="legacy-header"] img').count()) > 0)
+        fail('en-tête', 'un logo est encore présent');
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await page.waitForTimeout(200);
+    const top = await page
+        .locator('[data-test="sticky-header"]')
+        .evaluate((e) => Math.round(e.getBoundingClientRect().top));
+    const scrolled = await page.evaluate(() => window.scrollY);
+    if (scrolled > 0 && top !== 0)
+        fail('en-tête', `non fixe au défilement (top=${top})`);
     console.log(
-        `${problems.length ? '✗' : '✓'} [${where}] ${label}${h1 ? ` — « ${h1} »` : ''}`,
+        `  ✓ en-tête « ${title} · ${service} »${scrolled > 0 ? ' (fixe au défilement)' : ''}`,
     );
-}
 
-// --- Connexion -------------------------------------------------
-await page.goto(`${BASE}/login`);
-await page.fill('#email', env.E2E_EMAIL);
-await page.fill('#password', env.E2E_PASSWORD);
-await page.click('[data-test=login-button]');
-await page.waitForURL((u) => !u.pathname.endsWith('/login'), {
-    timeout: 90000,
-    waitUntil: 'commit',
-});
-await page.goto(`${BASE}/dashboard`);
-await settle();
-consoleErrors = [];
-if (!new URL(page.url()).pathname.startsWith('/dashboard')) {
-    console.error(`Connexion impossible : arrivé sur ${page.url()}`);
-    process.exit(2);
-}
+    // --- Menu latéral : catégories, accordéon, entrées ------------------------
+    const groupButtons = page.locator(SIDEBAR_BTN);
+    const groupCount = await groupButtons.count();
+    const groups = [];
+    for (let i = 0; i < groupCount; i++)
+        groups.push((await groupButtons.nth(i).innerText()).trim());
+    if (groups.length === 0) fail('menu', 'aucune catégorie visible');
 
-// --- Menu latéral : chaque groupe, puis chaque entrée -------------------------
-const groupButtons = page.locator(
-    '[data-sidebar="content"] [data-sidebar="menu-button"]',
-);
-const groupCount = await groupButtons.count();
-const groupLabels = [];
-for (let i = 0; i < groupCount; i++) {
-    const t = (await groupButtons.nth(i).innerText()).trim();
-    if (t) groupLabels.push(t);
-}
-for (const group of groupLabels) {
-    await page.goto(`${BASE}/dashboard`);
-    await settle();
-    await page
-        .locator('[data-sidebar="content"] [data-sidebar="menu-button"]', {
-            hasText: group,
-        })
-        .first()
-        .click();
-    await page.waitForTimeout(250);
-    const items = await page
-        .locator('[data-sidebar="menu-sub-button"]:visible')
+    if (groups.length >= 1) {
+        const open = (label) =>
+            page.locator(SIDEBAR_BTN, { hasText: label }).first();
+        await open(groups[0]).click();
+        await page.waitForTimeout(300);
+        const chevron = await open(groups[0])
+            .locator('svg')
+            .last()
+            .evaluate((s) => s.getAttribute('class') ?? '');
+        if (!chevron.includes('rotate-90'))
+            fail('accordéon', 'le chevron ne pivote pas à l’ouverture');
+        if ((await page.locator(`${SUB_BTN}:visible`).count()) === 0)
+            fail('accordéon', 'le clic n’ouvre pas la catégorie');
+        if (groups.length >= 2) {
+            await open(groups[1]).click();
+            await page.waitForTimeout(300);
+            const opened = await page
+                .locator('[data-sidebar="menu-item"][data-state="open"]')
+                .count();
+            if (opened !== 1)
+                fail(
+                    'accordéon',
+                    `${opened} catégories ouvertes en même temps`,
+                );
+        }
+        console.log(
+            '  ✓ accordéon : ouverture, chevron, une seule catégorie ouverte',
+        );
+    }
+
+    for (const group of groups) {
+        await go('/dashboard');
+        await page.locator(SIDEBAR_BTN, { hasText: group }).first().click();
+        await page.waitForTimeout(250);
+        const items = await page
+            .locator(`${SUB_BTN}:visible`)
+            .evaluateAll((as) =>
+                as.map((a) => ({
+                    label: a.textContent.trim(),
+                    href: a.getAttribute('href'),
+                })),
+            );
+        if (items.length === 0)
+            fail('menu', `catégorie « ${group} » sans entrée`);
+        for (const item of items) {
+            await go('/dashboard');
+            await page.locator(SIDEBAR_BTN, { hasText: group }).first().click();
+            await page.waitForTimeout(250);
+            await page.locator(`${SUB_BTN}[href="${item.href}"]`).click();
+            await waitPath(item.href);
+            await verify(`menu › ${group}`, item.label, item.href);
+            const active = await page
+                .locator(`${SUB_BTN}[href="${item.href}"]`)
+                .first()
+                .getAttribute('data-active');
+            if (active !== 'true')
+                fail(
+                    `menu › ${group} › ${item.label}`,
+                    'écran courant non mis en évidence',
+                );
+        }
+        if (items[0]) {
+            await go(items[0].href);
+            const visible = await page
+                .locator(`${SUB_BTN}[href="${items[0].href}"]`)
+                .first()
+                .isVisible();
+            if (!visible)
+                fail(
+                    `menu › ${group}`,
+                    'catégorie de la page courante non ouverte par défaut',
+                );
+        }
+    }
+
+    // --- Menu du haut ---------------------------------------------------------
+    await go('/dashboard');
+    const topLinks = await page
+        .locator('nav[aria-label="Menu principal"] a[href]')
+        .evaluateAll((as) =>
+            as
+                .filter((a) => a.getAttribute('href') !== '/notifications')
+                .map((a) => ({
+                    label: a.textContent.trim(),
+                    href: a.getAttribute('href'),
+                })),
+        );
+    for (const item of topLinks) {
+        await go('/dashboard');
+        await page
+            .locator(`nav[aria-label="Menu principal"] a[href="${item.href}"]`)
+            .click();
+        await waitPath(item.href);
+        await verify('menu du haut', item.label, item.href);
+    }
+
+    // --- Menu Fichier (ouverture, échap, clic) --------------------------------
+    await go('/dashboard');
+    const trigger = page.locator(
+        'nav[aria-label="Menu principal"] button:has-text("Fichier")',
+    );
+    await trigger.click();
+    const fichier = await page
+        .locator('[role="menu"] a[href]')
         .evaluateAll((as) =>
             as.map((a) => ({
                 label: a.textContent.trim(),
                 href: a.getAttribute('href'),
             })),
         );
-    if (items.length === 0)
-        failures.push(
-            `[menu] groupe « ${group} » sans entrée visible après clic`,
-        );
-    for (const item of items) {
-        await page.goto(`${BASE}/dashboard`);
-        await settle();
-        await page
-            .locator('[data-sidebar="content"] [data-sidebar="menu-button"]', {
-                hasText: group,
-            })
-            .first()
-            .click();
-        await page.waitForTimeout(250);
-        await page
-            .locator(`[data-sidebar="menu-sub-button"][href="${item.href}"]`)
-            .click();
-        await page
-            .waitForURL((u) => u.pathname === item.href, {
-                timeout: 30000,
-                waitUntil: 'commit',
-            })
-            .catch(() => {});
-        await verify(`menu › ${group}`, item.label, item.href);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    if (
+        (await page.evaluate(
+            () => getComputedStyle(document.body).pointerEvents,
+        )) === 'none'
+    ) {
+        fail('Fichier', 'body pointer-events: none après fermeture du menu');
+    }
+    for (const item of fichier) {
+        await go('/dashboard');
+        await trigger.click();
+        await page.locator(`[role="menu"] a[href="${item.href}"]`).click();
+        await waitPath(item.href);
+        await verify('Fichier', item.label, item.href);
+    }
+
+    // --- Cloche, puis menu utilisateur ----------------------------------------
+    await go('/dashboard');
+    await page.locator('[data-test="notifications-bell"]').click();
+    await waitPath('/notifications');
+    await verify('en-tête', 'Notifications', '/notifications');
+    await go('/dashboard');
+    await page.locator('[data-sidebar="footer"] button').last().click();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await page.locator(SIDEBAR_BTN).first().click();
+    await verify('après menu utilisateur', 'Bonjour', null);
+
+    await ctx.close();
+    summary.push(`${name} : ${checked} pages — ${groups.join(' / ')}`);
+}
+
+const wanted = process.argv.slice(2);
+for (const name of wanted.length ? wanted : Object.keys(ROLES)) {
+    try {
+        await runRole(name);
+    } catch (e) {
+        failures.push(`[${name}] exception : ${e.message.split('\n')[0]}`);
+        console.log(`  ✗ [${name}] exception : ${e.message.split('\n')[0]}`);
     }
 }
 
-// --- Menu du haut --------------------------------------------------------------
-const top = await page
-    .locator('nav[aria-label="Menu principal"] a[href]')
-    .evaluateAll((as) =>
-        as
-            .filter((a) => a.getAttribute('href') !== '/notifications')
-            .map((a) => ({
-                label: a.textContent.trim(),
-                href: a.getAttribute('href'),
-            })),
-    );
-for (const item of top) {
-    await page.goto(`${BASE}/dashboard`);
-    await settle();
-    await page
-        .locator(`nav[aria-label="Menu principal"] a[href="${item.href}"]`)
-        .click();
-    await page
-        .waitForURL((u) => u.pathname === item.href, {
-            timeout: 30000,
-            waitUntil: 'commit',
-        })
-        .catch(() => {});
-    await verify('menu du haut', item.label, item.href);
-}
-
-// --- Menu Fichier (ouverture, clic, fermeture à l'échap) ------------------------
-await page.goto(`${BASE}/dashboard`);
-await settle();
-const trigger = page.locator(
-    'nav[aria-label="Menu principal"] button:has-text("Fichier")',
-);
-await trigger.click();
-const fichier = await page
-    .locator('[role="menu"] a[href]')
-    .evaluateAll((as) =>
-        as.map((a) => ({
-            label: a.textContent.trim(),
-            href: a.getAttribute('href'),
-        })),
-    );
-await page.keyboard.press('Escape');
-await page.waitForTimeout(300);
-if (
-    (await page.evaluate(
-        () => getComputedStyle(document.body).pointerEvents,
-    )) === 'none'
-) {
-    failures.push(
-        '[Fichier] body pointer-events: none après fermeture du menu',
-    );
-}
-for (const item of fichier) {
-    await page.goto(`${BASE}/dashboard`);
-    await settle();
-    await trigger.click();
-    await page.locator(`[role="menu"] a[href="${item.href}"]`).click();
-    await page
-        .waitForURL((u) => u.pathname === item.href, {
-            timeout: 30000,
-            waitUntil: 'commit',
-        })
-        .catch(() => {});
-    await verify('Fichier', item.label, item.href);
-}
-
-// --- Cloche de notifications ---------------------------------------------------
-await page.goto(`${BASE}/dashboard`);
-await settle();
-await page.locator('[data-test="notifications-bell"]').click();
-await page
-    .waitForURL((u) => u.pathname === '/notifications', {
-        timeout: 30000,
-        waitUntil: 'commit',
-    })
-    .catch(() => {});
-await verify('en-tête', 'Notifications', '/notifications');
-
-// --- Menu utilisateur : ouvrir/fermer puis rester cliquable ---------------------
-await page.goto(`${BASE}/dashboard`);
-await settle();
-await page.locator('[data-sidebar="footer"] button').last().click();
-await page.keyboard.press('Escape');
-await page.waitForTimeout(300);
-await groupButtons.first().click();
-await verify('après menu utilisateur', 'Bonjour', null);
-
 await browser.close();
-console.log(`\n${checked} pages vérifiées, ${failures.length} échec(s).`);
+console.log('\n=== Résumé ===');
+summary.forEach((s) => console.log(s));
+console.log(`${failures.length} échec(s).`);
 failures.forEach((f) => console.log(`  ✗ ${f}`));
 process.exit(failures.length ? 1 : 0);

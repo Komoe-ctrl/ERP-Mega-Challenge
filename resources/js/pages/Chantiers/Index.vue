@@ -1,39 +1,48 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
-import { h } from 'vue';
+import { h, ref } from 'vue';
+import ChantierController from '@/actions/App/Http/Controllers/Chantiers/ChantierController';
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
-import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { usePermissions } from '@/composables/usePermissions';
 import { badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr } from '@/lib/format';
-import { globalProgress, taskHealth } from '@/lib/planning';
 import { statuses } from '@/lib/status';
-import { chantiers, tasksOf } from '@/mocks/chantiers';
+import type { Paginated } from '@/types';
 import type { Chantier } from '@/types/erp';
+
+type Row = Chantier & { progress: number; late: number };
+type Filters = { q: string; status: string; project: string };
+
+const props = defineProps<{
+    chantiers: Paginated<Row>;
+    filters: Filters;
+    projects: { value: string; label: string }[];
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
 
 const { can } = usePermissions();
+const search = ref(props.filters.q);
 
-type Row = Chantier & { progress: number; late: number };
+function apply(changes: Partial<Filters>) {
+    const next = { ...props.filters, ...changes };
 
-const rows: Row[] = chantiers.map((c) => {
-    const t = tasksOf(c.id);
-
-    return {
-        ...c,
-        progress: globalProgress(t),
-        late: t.filter((x) => ['late', 'risk', 'stale'].includes(taskHealth(x)))
-            .length,
-    };
-});
+    router.get(
+        ChantierController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
 
 const columns: DataTableColumn<Row>[] = [
     {
@@ -41,7 +50,7 @@ const columns: DataTableColumn<Row>[] = [
         header: 'Chantier',
         cell: ({ row }) =>
             linkCell(
-                `/chantiers/${row.original.id}`,
+                ChantierController.show.url(row.original.id),
                 row.original.name,
                 row.original.code,
             ),
@@ -51,7 +60,6 @@ const columns: DataTableColumn<Row>[] = [
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('site', row.original.status),
     },
     {
@@ -79,17 +87,6 @@ const columns: DataTableColumn<Row>[] = [
         cell: ({ row }) => dateFr(row.original.endDate),
     },
 ];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.site).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
-    },
-];
 </script>
 
 <template>
@@ -101,14 +98,67 @@ const filters: DataTableFilter[] = [
             description="Un utilisateur de terrain ne voit que les chantiers auxquels il est affecté."
         >
             <Button v-if="can('chantiers.create')" as-child>
-                <Link href="/chantiers/creer"><Plus /> Nouveau chantier</Link>
+                <Link :href="ChantierController.create.url()"
+                    ><Plus /> Nouveau chantier</Link
+                >
             </Button>
         </PageHeader>
+
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher un chantier…"
+                    aria-label="Rechercher un chantier"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par statut"
+                :value="filters.status"
+                @change="
+                    apply({
+                        status: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Statut : tous</option>
+                <option
+                    v-for="(meta, value) in statuses.site"
+                    :key="value"
+                    :value="value"
+                >
+                    {{ meta.label }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par projet"
+                :value="filters.project"
+                @change="
+                    apply({
+                        project: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Projet : tous</option>
+                <option v-for="p in projects" :key="p.value" :value="p.value">
+                    {{ p.label }}
+                </option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher un chantier…"
+            :data="chantiers.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun chantier ne correspond à ces filtres."
         />
+        <PaginationBar :page="chantiers" />
     </div>
 </template>

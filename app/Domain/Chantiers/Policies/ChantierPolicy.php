@@ -18,12 +18,24 @@ final class ChantierPolicy extends ModulePolicy
         return Module::Chantiers;
     }
 
-    /** RG4.3 : un chantier clôturé, ou dont le projet est clôturé ou abandonné, est en lecture seule. */
+    /** RG7.2 : un utilisateur de terrain ne voit que ses chantiers. */
+    public function view(User $user, Model $model): bool
+    {
+        return $model instanceof Chantier
+            && $this->allows($user, PermissionAction::View)
+            && $model->isVisibleTo($user);
+    }
+
+    /**
+     * RG4.3 : un chantier clôturé, ou dont le projet est clôturé ou abandonné,
+     * est en lecture seule. RG7.2 : un utilisateur de terrain n'écrit que sur ses chantiers.
+     */
     public function update(User $user, Model $model): bool
     {
         return $model instanceof Chantier
             && ! $model->isReadOnly()
-            && $this->allows($user, PermissionAction::Update);
+            && $this->allows($user, PermissionAction::Update)
+            && $model->isVisibleTo($user);
     }
 
     public function delete(User $user, Model $model): bool

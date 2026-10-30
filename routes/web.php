@@ -25,16 +25,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 |
 */
 
-// --- V1 : Chantiers (M7) ---------------------------------------------------
-Route::middleware(['auth', 'verified', 'can:chantiers.view'])->prefix('chantiers')->name('chantiers.')->group(function () {
-    Route::inertia('/', 'Chantiers/Index')->name('index');
-    Route::inertia('creer', 'Chantiers/Form')->name('create');
-    Route::get('{id}/modifier', fn (int $id) => Inertia::render('Chantiers/Form', ['id' => $id]))->whereNumber('id')->name('edit');
-    Route::get('{id}', fn (int $id) => Inertia::render('Chantiers/Show', ['id' => $id]))->whereNumber('id')->name('show');
-    Route::get('{id}/avancement', fn (int $id) => Inertia::render('Chantiers/Avancement', ['id' => $id]))->whereNumber('id')->name('avancement');
-    Route::get('{id}/rapport', fn (int $id) => Inertia::render('Chantiers/Rapport', ['id' => $id]))->whereNumber('id')->name('rapport');
-});
-
 // --- V1 : Achats — demandes et référentiel des prix (M8) --------------------
 Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
     Route::inertia('demandes', 'Achats/Demandes/Index')->name('demandes');
@@ -136,3 +126,4 @@ Route::post('demo/role', function (Request $request) {
 require __DIR__.'/settings.php';
 require __DIR__.'/administration.php';
 require __DIR__.'/projets.php';
+require __DIR__.'/chantiers.php';

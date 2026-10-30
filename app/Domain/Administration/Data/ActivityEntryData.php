@@ -13,6 +13,8 @@ use App\Domain\Administration\Models\Setting;
 use App\Domain\Administration\Models\Site;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Chantiers\Models\Chantier;
+use App\Domain\Chantiers\Models\DailyReport;
+use App\Domain\Chantiers\Models\Task;
 use App\Domain\Clients\Models\Client;
 use App\Domain\Projets\Models\Project;
 use App\Models\User;
@@ -42,6 +44,8 @@ final readonly class ActivityEntryData
         FiscalYear::class => 'Exercice',
         Project::class => 'Projet',
         Chantier::class => 'Chantier',
+        Task::class => 'Tâche',
+        DailyReport::class => 'Rapport journalier',
         Client::class => 'Client',
         BudgetLine::class => 'Poste budgétaire',
     ];

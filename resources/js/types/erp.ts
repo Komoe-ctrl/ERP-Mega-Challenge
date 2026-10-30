@@ -71,7 +71,10 @@ export type Task = {
     weight: number; // pondération pour l'avancement global
     milestone?: boolean;
     lastUpdate: string;
-    comment?: string;
+    comment?: string | null;
+    /** Calculés par le serveur (RG7.5 à RG7.7), jamais par l'écran. */
+    theoretical?: number;
+    health?: TaskHealth;
 };
 
 export type DailyReport = {

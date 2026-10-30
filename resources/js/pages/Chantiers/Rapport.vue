@@ -1,37 +1,38 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { Camera } from '@lucide/vue';
-import { computed, reactive, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import DailyReportController from '@/actions/App/Http/Controllers/Chantiers/DailyReportController';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { dateFr, TODAY } from '@/lib/format';
-import { chantiers } from '@/mocks/chantiers';
+import { dateFr } from '@/lib/format';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    chantier: { id: number; code: string; name: string };
+    today: string;
+    alreadySent: boolean;
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
 
-const chantier = computed(
-    () => chantiers.find((c) => c.id === props.id) ?? chantiers[0],
-);
-
 // RG7.9 : travaux, effectif, matériaux reçus et consommés, incidents, photos.
-const form = reactive({
+const form = useForm({
     works: '',
     headcount: 0,
-    received: '',
-    used: '',
+    materials_received: '',
+    materials_used: '',
     incidents: '',
+    photos: [] as File[],
 });
-const photos = ref(0);
 
 function submit() {
-    toast.success('Rapport journalier enregistré (maquette).');
-    router.visit(`/chantiers/${chantier.value.id}`);
+    form.post(DailyReportController.store.url(props.chantier.id), {
+        forceFormData: true,
+        onError: (errors) => toast.error(Object.values(errors)[0]),
+    });
 }
 
 const fieldClass =
@@ -50,9 +51,18 @@ const fieldClass =
                 Rapport journalier
             </h1>
             <p class="text-sm text-muted-foreground">
-                {{ chantier.code }} · {{ chantier.name }} · {{ dateFr(TODAY) }}
+                {{ chantier.code }} · {{ chantier.name }} ·
+                {{ dateFr(today) }}
             </p>
         </div>
+
+        <p
+            v-if="alreadySent"
+            class="rounded-lg bg-warning-soft p-3 text-sm text-warning"
+        >
+            Un rapport a déjà été envoyé aujourd’hui pour ce chantier : un seul
+            rapport est accepté par jour.
+        </p>
 
         <div class="space-y-4 rounded-2xl border bg-card p-4 shadow-xs">
             <div class="grid gap-2">
@@ -64,6 +74,9 @@ const fieldClass =
                     required
                     :class="fieldClass"
                 />
+                <p v-if="form.errors.works" class="text-sm text-destructive">
+                    {{ form.errors.works }}
+                </p>
             </div>
             <div class="grid gap-2">
                 <Label for="headcount">Effectif présent</Label>
@@ -75,12 +88,18 @@ const fieldClass =
                     inputmode="numeric"
                     class="h-12 text-base"
                 />
+                <p
+                    v-if="form.errors.headcount"
+                    class="text-sm text-destructive"
+                >
+                    {{ form.errors.headcount }}
+                </p>
             </div>
             <div class="grid gap-2">
                 <Label for="received">Matériaux reçus</Label>
                 <textarea
                     id="received"
-                    v-model="form.received"
+                    v-model="form.materials_received"
                     rows="2"
                     :class="fieldClass"
                 />
@@ -89,7 +108,7 @@ const fieldClass =
                 <Label for="used">Matériaux consommés</Label>
                 <textarea
                     id="used"
-                    v-model="form.used"
+                    v-model="form.materials_used"
                     rows="2"
                     :class="fieldClass"
                 />
@@ -108,7 +127,11 @@ const fieldClass =
                 class="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-medium hover:bg-accent"
             >
                 <Camera class="size-5" />
-                {{ photos ? `${photos} photo(s)` : 'Ajouter des photos' }}
+                {{
+                    form.photos.length
+                        ? `${form.photos.length} photo(s)`
+                        : 'Ajouter des photos'
+                }}
                 <input
                     type="file"
                     accept="image/*"
@@ -116,9 +139,9 @@ const fieldClass =
                     multiple
                     class="sr-only"
                     @change="
-                        photos +=
-                            ($event.target as HTMLInputElement).files?.length ??
-                            0
+                        form.photos = Array.from(
+                            ($event.target as HTMLInputElement).files ?? [],
+                        )
                     "
                 />
             </label>
@@ -133,14 +156,15 @@ const fieldClass =
                     variant="outline"
                     size="lg"
                     class="flex-1"
-                    as-child
+                    @click="router.visit(`/chantiers/${chantier.id}`)"
                 >
-                    <Link :href="`/chantiers/${chantier.id}`">Annuler</Link>
+                    Annuler
                 </Button>
                 <Button
                     type="submit"
                     size="lg"
                     class="flex-[2] bg-brand text-brand-foreground hover:bg-brand/90"
+                    :disabled="form.processing || alreadySent"
                 >
                     Envoyer le rapport
                 </Button>

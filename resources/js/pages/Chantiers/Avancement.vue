@@ -1,36 +1,32 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Camera, Minus, Plus } from '@lucide/vue';
 import { computed, reactive } from 'vue';
 import { toast } from 'vue-sonner';
+import ProgressController from '@/actions/App/Http/Controllers/Chantiers/ProgressController';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr } from '@/lib/format';
-import { taskHealth, theoreticalProgress } from '@/lib/planning';
-import { chantiers, tasksOf } from '@/mocks/chantiers';
+import type { Task } from '@/types/erp';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    chantier: { id: number; code: string; name: string };
+    tasks: Task[];
+    thresholds: { risk: number; staleDays: number };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
 
-const chantier = computed(
-    () => chantiers.find((c) => c.id === props.id) ?? chantiers[0],
-);
-const editable = computed(() =>
-    tasksOf(chantier.value.id).filter((t) => !t.milestone),
-);
-
 // RG7.4 : avancement en %, commentaire et photos, par tâche.
-const entries = reactive<
-    Record<number, { progress: number; comment: string; photos: number }>
->(
+type Entry = { progress: number; comment: string; files: File[] };
+const entries = reactive<Record<number, Entry>>(
     Object.fromEntries(
-        editable.value.map((t) => [
+        props.tasks.map((t) => [
             t.id,
-            { progress: t.progress, comment: '', photos: 0 },
+            { progress: t.progress, comment: '', files: [] },
         ]),
     ),
 );
@@ -42,23 +38,35 @@ function step(taskId: number, delta: number) {
 
 function addPhotos(taskId: number, event: Event) {
     const input = event.target as HTMLInputElement;
-    entries[taskId].photos += input.files?.length ?? 0;
+    entries[taskId].files = Array.from(input.files ?? []);
 }
 
 const changed = computed(() =>
-    editable.value.filter(
+    props.tasks.filter(
         (t) =>
             entries[t.id].progress !== t.progress ||
             entries[t.id].comment ||
-            entries[t.id].photos,
+            entries[t.id].files.length,
     ),
 );
 
+// Le serveur recalcule l'état des tâches (retard, risque, non renseignée) à l'enregistrement.
 function submit() {
-    toast.success(
-        `${changed.value.length} tâche(s) mise(s) à jour (maquette).`,
+    router.post(
+        ProgressController.store.url(props.chantier.id),
+        {
+            entries: changed.value.map((t) => ({
+                task_id: t.id,
+                progress: entries[t.id].progress,
+                comment: entries[t.id].comment || null,
+                photos: entries[t.id].files,
+            })),
+        },
+        {
+            forceFormData: true,
+            onError: (errors) => toast.error(Object.values(errors)[0]),
+        },
     );
-    router.visit(`/chantiers/${chantier.value.id}`);
 }
 </script>
 
@@ -74,7 +82,7 @@ function submit() {
         </div>
 
         <article
-            v-for="t in editable"
+            v-for="t in tasks"
             :key="t.id"
             class="space-y-3 rounded-2xl border bg-card p-4 shadow-xs"
         >
@@ -83,15 +91,10 @@ function submit() {
                     <p class="font-medium">{{ t.name }}</p>
                     <p class="text-xs text-muted-foreground">
                         {{ dateFr(t.start) }} → {{ dateFr(t.end) }} · théorique
-                        {{ theoreticalProgress(t) }} %
+                        {{ t.theoretical }} %
                     </p>
                 </div>
-                <StatusBadge
-                    kind="task"
-                    :status="
-                        taskHealth({ ...t, progress: entries[t.id].progress })
-                    "
-                />
+                <StatusBadge v-if="t.health" kind="task" :status="t.health" />
             </div>
 
             <div class="flex items-center gap-3">
@@ -130,7 +133,7 @@ function submit() {
             />
             <ProgressBar
                 :value="entries[t.id].progress"
-                :marker="theoreticalProgress(t)"
+                :marker="t.theoretical"
                 :show-value="false"
             />
 
@@ -146,8 +149,8 @@ function submit() {
             >
                 <Camera class="size-5" />
                 {{
-                    entries[t.id].photos
-                        ? `${entries[t.id].photos} photo(s) ajoutée(s)`
+                    entries[t.id].files.length
+                        ? `${entries[t.id].files.length} photo(s) ajoutée(s)`
                         : 'Ajouter des photos'
                 }}
                 <input
@@ -161,13 +164,22 @@ function submit() {
             </label>
         </article>
 
+        <p v-if="!tasks.length" class="text-sm text-muted-foreground">
+            Aucune tâche à renseigner : le planning de ce chantier est vide.
+        </p>
+
         <!-- Barre d'action collée en bas : pouce accessible sur smartphone -->
         <div
             class="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 p-3 backdrop-blur"
         >
             <div class="mx-auto flex max-w-2xl gap-2">
-                <Button variant="outline" size="lg" class="flex-1" as-child>
-                    <Link :href="`/chantiers/${chantier.id}`">Annuler</Link>
+                <Button
+                    variant="outline"
+                    size="lg"
+                    class="flex-1"
+                    @click="router.visit(`/chantiers/${chantier.id}`)"
+                >
+                    Annuler
                 </Button>
                 <Button
                     size="lg"

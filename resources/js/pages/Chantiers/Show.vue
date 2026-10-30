@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Camera,
     ClipboardList,
@@ -10,6 +10,12 @@ import {
     UserPlus,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import { toast } from 'vue-sonner';
+import ChantierController from '@/actions/App/Http/Controllers/Chantiers/ChantierController';
+import DailyReportController from '@/actions/App/Http/Controllers/Chantiers/DailyReportController';
+import PlanningController from '@/actions/App/Http/Controllers/Chantiers/PlanningController';
+import ProgressController from '@/actions/App/Http/Controllers/Chantiers/ProgressController';
+import EmptyState from '@/components/erp/EmptyState.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import GanttChart from '@/components/erp/GanttChart.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
@@ -17,63 +23,57 @@ import PageHeader from '@/components/erp/PageHeader.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import TabsNav from '@/components/erp/TabsNav.vue';
-import EmptyState from '@/components/erp/EmptyState.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
 import { dateFr, fcfa, number, percent } from '@/lib/format';
-import {
-    globalProgress,
-    taskHealth,
-    theoreticalProgress,
-} from '@/lib/planning';
 import { consumptionTone } from '@/lib/status';
-import {
-    budgetLevel,
-    budgetOf,
-    budgetTotals,
-    requestTotal,
-    requests,
-} from '@/mocks/achats';
-import { chantiers, dailyReports, tasksOf } from '@/mocks/chantiers';
+import { requestTotal, requests } from '@/mocks/achats';
 import { orders } from '@/mocks/v2';
-import { toast } from 'vue-sonner';
-import type { Task } from '@/types/erp';
+import type { Chantier, DailyReport, Task } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+type Photo = { id: number; url: string; caption: string; date: string };
+type Budget = {
+    lines: number;
+    revised: number;
+    committed: number;
+    actual: number;
+    remaining: number;
+    consumption: number;
+};
+
+const props = defineProps<{
+    chantier: Chantier;
+    tasks: Task[];
+    progress: number;
+    budget: Budget;
+    photos: Photo[];
+    reports: (DailyReport & { photos: number })[];
+    canEdit: boolean;
+    readOnly: boolean;
+    members: { value: string; label: string }[];
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Chantiers', href: '/chantiers' }] },
 });
 
-const { can } = usePermissions();
-const chantier = computed(
-    () => chantiers.find((c) => c.id === props.id) ?? chantiers[0],
-);
-// Tâches ajoutées pendant la session (maquette) en plus des tâches du planning.
-const extraTasks = ref<Task[]>([]);
-const extraTeam = ref<{ name: string; role: string }[]>([]);
-const tasks = computed(() => [
-    ...tasksOf(chantier.value.id),
-    ...extraTasks.value.filter((t) => t.chantierId === chantier.value.id),
-]);
-const readOnly = computed(() => chantier.value.status === 'cloture');
 const taskOpen = ref(false);
-const importOpen = ref(false);
 const memberOpen = ref(false);
 
 const taskFields: FieldDef[] = [
     { name: 'name', label: 'Tâche', required: true, minLength: 3, wide: true },
-    { name: 'start', label: 'Début', type: 'date', required: true },
+    { name: 'start_date', label: 'Début', type: 'date', required: true },
     {
-        name: 'end',
+        name: 'end_date',
         label: 'Fin prévue',
         type: 'date',
-        required: true,
         validate: (value, values) =>
-            values.start && value && String(value) < String(values.start)
+            values.start_date &&
+            value &&
+            String(value) < String(values.start_date)
                 ? 'La fin doit être postérieure au début.'
                 : null,
+        hint: 'Facultative pour un jalon.',
     },
     {
         name: 'weight',
@@ -85,61 +85,63 @@ const taskFields: FieldDef[] = [
         step: 1,
         hint: 'Poids de la tâche dans l’avancement global (RG7.8).',
     },
-    { name: 'milestone', label: 'Jalon (sans durée)', type: 'checkbox' },
-];
-const importFields: FieldDef[] = [
-    {
-        name: 'file',
-        label: 'Fichier Excel (.xlsx)',
-        type: 'file',
-        required: true,
-        hint: 'Colonnes attendues : Tâche, Début, Fin prévue, Pondération. 20 Mo maximum.',
-        wide: true,
-    },
+    { name: 'is_milestone', label: 'Jalon (sans durée)', type: 'checkbox' },
 ];
 const memberFields: FieldDef[] = [
-    { name: 'name', label: 'Nom', required: true, minLength: 3 },
+    {
+        name: 'user_id',
+        label: 'Membre',
+        type: 'select',
+        required: true,
+        options: props.members,
+    },
     {
         name: 'role',
-        label: 'Rôle',
+        label: 'Rôle sur le chantier',
         type: 'select',
         required: true,
         options: [
-            'Chef d’équipe',
-            'Topographe',
-            'Magasinier de chantier',
-            'Technicien',
-        ].map((r) => ({ value: r, label: r })),
+            { value: 'conducteur', label: 'Conducteur de travaux' },
+            { value: 'chef_chantier', label: 'Chef de chantier' },
+            { value: 'magasinier', label: 'Magasinier de chantier' },
+        ],
     },
 ];
 
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0]);
+
+// Toutes les règles sont appliquées par le serveur ; ses refus reviennent en notification.
 function addTask(v: FieldValues) {
-    extraTasks.value.push({
-        id: Date.now(),
-        chantierId: chantier.value.id,
-        name: String(v.name),
-        start: String(v.start),
-        end: String(v.milestone ? v.start : v.end),
-        progress: 0,
-        weight: Number(v.weight),
-        milestone: Boolean(v.milestone),
-        lastUpdate: '2026-10-29',
+    router.post(PlanningController.store.url(props.chantier.id), v as never, {
+        preserveScroll: true,
+        onError,
     });
-    toast.success('Tâche ajoutée au planning (maquette).');
 }
-function importPlanning(v: FieldValues) {
-    toast.success(
-        `Planning importé depuis « ${String(v.file)} » : 6 tâches créées (maquette).`,
-    );
+function importPlanning(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (file) {
+        router.post(
+            PlanningController.import.url(props.chantier.id),
+            { file },
+            { preserveScroll: true, forceFormData: true, onError },
+        );
+    }
+
+    input.value = '';
 }
 function addMember(v: FieldValues) {
-    extraTeam.value.push({ name: String(v.name), role: String(v.role) });
-    toast.success('Membre affecté au chantier (maquette).');
+    router.post(ChantierController.assign.url(props.chantier.id), v as never, {
+        preserveScroll: true,
+        onError,
+    });
 }
-const lines = computed(() => budgetOf(chantier.value.id));
-const totals = computed(() => budgetTotals(lines.value));
+
+// Demandes et commandes : branchées avec le module Achats (M8).
 const chantierRequests = computed(() =>
-    requests.filter((r) => r.chantierId === chantier.value.id),
+    requests.filter((r) => r.chantierId === props.chantier.id),
 );
 const chantierOrders = computed(() =>
     orders.filter((o) =>
@@ -148,20 +150,19 @@ const chantierOrders = computed(() =>
         ),
     ),
 );
-const reports = computed(() =>
-    dailyReports.filter((r) => r.chantierId === chantier.value.id),
-);
-const progress = computed(() => globalProgress(tasks.value));
+
+// L'état des tâches (retard, risque, non renseignée) est calculé par le serveur.
 const problemTasks = computed(() =>
-    tasks.value.filter((t) =>
-        ['late', 'risk', 'stale'].includes(taskHealth(t)),
+    props.tasks.filter((t) =>
+        ['late', 'risk', 'stale'].includes(t.health ?? ''),
     ),
 );
+const lastPhotos = computed(() => props.photos.slice(0, 4));
 
 const tab = ref('apercu');
 const tabs = computed(() => [
     { key: 'apercu', label: 'Vue d’ensemble' },
-    { key: 'planning', label: 'Planning', count: tasks.value.length },
+    { key: 'planning', label: 'Planning', count: props.tasks.length },
     { key: 'avancement', label: 'Avancement' },
     {
         key: 'demandes',
@@ -169,8 +170,8 @@ const tabs = computed(() => [
         count: chantierRequests.value.length,
     },
     { key: 'budget', label: 'Budget' },
-    { key: 'photos', label: 'Photos' },
-    { key: 'rapports', label: 'Rapports', count: reports.value.length },
+    { key: 'photos', label: 'Photos', count: props.photos.length },
+    { key: 'rapports', label: 'Rapports', count: props.reports.length },
 ]);
 </script>
 
@@ -183,22 +184,18 @@ const tabs = computed(() => [
             :description="`${chantier.code} · ${chantier.projectName} · ${chantier.location}`"
         >
             <StatusBadge kind="site" :status="chantier.status" />
-            <Button
-                v-if="can('chantiers.update') && !readOnly"
-                variant="outline"
-                as-child
-            >
-                <Link :href="`/chantiers/${chantier.id}/modifier`"
+            <Button v-if="canEdit && !readOnly" variant="outline" as-child>
+                <Link :href="ChantierController.edit.url(chantier.id)"
                     ><Pencil /> Modifier</Link
                 >
             </Button>
-            <Button v-if="can('chantiers.update')" variant="outline" as-child>
-                <Link :href="`/chantiers/${chantier.id}/avancement`"
+            <Button v-if="canEdit && !readOnly" variant="outline" as-child>
+                <Link :href="ProgressController.create.url(chantier.id)"
                     ><PenLine /> Saisir l’avancement</Link
                 >
             </Button>
-            <Button v-if="can('chantiers.update')" variant="outline" as-child>
-                <Link :href="`/chantiers/${chantier.id}/rapport`"
+            <Button v-if="canEdit && !readOnly" variant="outline" as-child>
+                <Link :href="DailyReportController.create.url(chantier.id)"
                     ><ClipboardList /> Rapport du jour</Link
                 >
             </Button>
@@ -223,10 +220,10 @@ const tabs = computed(() => [
                 />
                 <KpiCard
                     label="Budget engagé + réel"
-                    :value="percent(totals.consumption, 1)"
-                    :hint="`Reste à engager : ${fcfa(totals.remaining)}`"
+                    :value="percent(budget.consumption, 1)"
+                    :hint="`Reste à engager : ${fcfa(budget.remaining)}`"
                     :tone="
-                        budgetLevel(totals.consumption) === 'ok'
+                        consumptionTone(budget.consumption) === 'success'
                             ? 'success'
                             : 'warning'
                     "
@@ -255,11 +252,14 @@ const tabs = computed(() => [
                                     class="block text-xs text-muted-foreground"
                                 >
                                     Réel {{ t.progress }} % · théorique
-                                    {{ theoreticalProgress(t) }} % · fin
+                                    {{ t.theoretical }} % · fin
                                     {{ dateFr(t.end) }}
                                 </span>
                             </span>
-                            <StatusBadge kind="task" :status="taskHealth(t)" />
+                            <StatusBadge
+                                kind="task"
+                                :status="t.health ?? 'ok'"
+                            />
                         </li>
                     </ul>
                     <EmptyState
@@ -273,7 +273,7 @@ const tabs = computed(() => [
                     <div class="mb-3 flex items-center justify-between gap-2">
                         <h2 class="font-display font-semibold">Équipe</h2>
                         <Button
-                            v-if="can('chantiers.update') && !readOnly"
+                            v-if="canEdit && !readOnly"
                             size="sm"
                             variant="outline"
                             @click="memberOpen = true"
@@ -281,17 +281,9 @@ const tabs = computed(() => [
                         >
                     </div>
                     <ul class="divide-y text-sm">
-                        <li class="flex justify-between py-2">
-                            <span class="font-medium">{{
-                                chantier.manager
-                            }}</span>
-                            <span class="text-muted-foreground"
-                                >Conducteur de travaux</span
-                            >
-                        </li>
                         <li
-                            v-for="m in [...chantier.team, ...extraTeam]"
-                            :key="m.name"
+                            v-for="m in chantier.team"
+                            :key="`${m.name}-${m.role}`"
                             class="flex justify-between py-2"
                         >
                             <span class="font-medium">{{ m.name }}</span>
@@ -310,21 +302,23 @@ const tabs = computed(() => [
                     <Camera class="size-4" /> Dernières photos
                 </h2>
                 <div
-                    v-if="chantier.lastPhoto.length"
+                    v-if="lastPhotos.length"
                     class="grid grid-cols-2 gap-3 sm:grid-cols-4"
                 >
                     <figure
-                        v-for="(p, i) in chantier.lastPhoto"
-                        :key="p"
+                        v-for="p in lastPhotos"
+                        :key="p.id"
                         class="overflow-hidden rounded-lg border"
                     >
-                        <div
-                            class="flex aspect-video items-center justify-center bg-muted text-xs text-muted-foreground"
-                            :class="i % 2 ? 'bg-secondary' : ''"
-                        >
-                            Photo
-                        </div>
-                        <figcaption class="p-2 text-xs">{{ p }}</figcaption>
+                        <img
+                            :src="p.url"
+                            :alt="p.caption"
+                            loading="lazy"
+                            class="aspect-video w-full object-cover"
+                        />
+                        <figcaption class="p-2 text-xs">
+                            {{ p.caption }}
+                        </figcaption>
                     </figure>
                 </div>
                 <EmptyState v-else compact title="Aucune photo" />
@@ -333,16 +327,22 @@ const tabs = computed(() => [
 
         <!-- Planning : Gantt maison + tableau -->
         <div v-else-if="tab === 'planning'" class="space-y-4">
-            <div
-                v-if="can('chantiers.update') && !readOnly"
-                class="flex flex-wrap gap-2"
-            >
+            <div v-if="canEdit && !readOnly" class="flex flex-wrap gap-2">
                 <Button variant="outline" @click="taskOpen = true"
                     ><Plus /> Ajouter une tâche</Button
                 >
-                <Button variant="outline" @click="importOpen = true"
-                    ><FileSpreadsheet /> Importer depuis Excel</Button
+                <label
+                    class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent"
+                    title="Colonnes : Tâche, Début, Fin prévue, Pondération, Jalon (oui/non). Première ligne = en-tête."
                 >
+                    <FileSpreadsheet class="size-4" /> Importer depuis Excel
+                    <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        class="sr-only"
+                        @change="importPlanning"
+                    />
+                </label>
             </div>
             <GanttChart v-if="tasks.length" :tasks="tasks" />
             <EmptyState
@@ -368,11 +368,11 @@ const tabs = computed(() => [
                             Dernière mise à jour : {{ dateFr(t.lastUpdate) }}
                         </p>
                     </div>
-                    <StatusBadge kind="task" :status="taskHealth(t)" />
+                    <StatusBadge kind="task" :status="t.health ?? 'ok'" />
                 </div>
                 <ProgressBar
                     :value="t.progress"
-                    :marker="theoreticalProgress(t)"
+                    :marker="t.theoretical"
                     tone="info"
                     label="Avancement réel (trait = théorique)"
                 />
@@ -437,19 +437,19 @@ const tabs = computed(() => [
         <!-- Budget -->
         <div v-else-if="tab === 'budget'" class="space-y-3">
             <div
-                v-if="lines.length"
+                v-if="budget.lines"
                 class="rounded-xl border bg-card p-4 shadow-xs"
             >
                 <ProgressBar
-                    :value="totals.consumption"
-                    :tone="consumptionTone(totals.consumption)"
-                    :label="`Consommation du budget révisé : ${number(totals.consumption, 1)} %`"
+                    :value="budget.consumption"
+                    :tone="consumptionTone(budget.consumption)"
+                    :label="`Consommation du budget révisé : ${number(budget.consumption, 1)} %`"
                     :show-value="false"
                 />
                 <p class="mt-2 text-sm text-muted-foreground">
-                    Révisé {{ fcfa(totals.revised) }} · engagé
-                    {{ fcfa(totals.committed) }} · coût réel
-                    {{ fcfa(totals.actual) }}
+                    Révisé {{ fcfa(budget.revised) }} · engagé
+                    {{ fcfa(budget.committed) }} · coût réel
+                    {{ fcfa(budget.actual) }}
                 </p>
                 <Button class="mt-3" variant="outline" as-child>
                     <Link :href="`/budget/${chantier.id}`"
@@ -463,20 +463,23 @@ const tabs = computed(() => [
         <!-- Photos -->
         <div v-else-if="tab === 'photos'">
             <div
-                v-if="chantier.lastPhoto.length"
+                v-if="photos.length"
                 class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
             >
                 <figure
-                    v-for="p in chantier.lastPhoto"
-                    :key="p"
+                    v-for="p in photos"
+                    :key="p.id"
                     class="overflow-hidden rounded-lg border bg-card"
                 >
-                    <div
-                        class="flex aspect-square items-center justify-center bg-muted text-xs text-muted-foreground"
-                    >
-                        Photo
-                    </div>
-                    <figcaption class="p-2 text-xs">{{ p }}</figcaption>
+                    <img
+                        :src="p.url"
+                        :alt="p.caption"
+                        loading="lazy"
+                        class="aspect-square w-full object-cover"
+                    />
+                    <figcaption class="p-2 text-xs">
+                        {{ p.caption }} · {{ dateFr(p.date) }}
+                    </figcaption>
                 </figure>
             </div>
             <EmptyState
@@ -517,14 +520,6 @@ const tabs = computed(() => [
             title="Ajouter une tâche"
             :fields="taskFields"
             @submit="addTask"
-        />
-        <FormDialog
-            v-model:open="importOpen"
-            title="Importer le planning depuis Excel"
-            description="RG7.3 : le planning peut être saisi dans l’application ou importé."
-            :fields="importFields"
-            submit-label="Importer"
-            @submit="importPlanning"
         />
         <FormDialog
             v-model:open="memberOpen"

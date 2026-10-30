@@ -101,4 +101,10 @@ defineProps<{
             </Button>
         </div>
     </Form>
+
+    <p class="text-center text-sm text-muted-foreground">
+        Poste de travail (service, titre, pointage) :
+        <TextLink href="/ecrans/identification">Identification</TextLink>
+        — disponible après connexion.
+    </p>
 </template>

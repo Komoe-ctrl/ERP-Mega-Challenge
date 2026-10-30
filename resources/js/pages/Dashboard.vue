@@ -2,6 +2,7 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    Clock,
     Bell,
     ClipboardCheck,
     ClipboardList,
@@ -20,7 +21,9 @@ import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
+import { useLegacySession } from '@/composables/useLegacySession';
 import { usePermissions } from '@/composables/usePermissions';
+import { toast } from 'vue-sonner';
 import { dateFr, fcfa, fcfaShort, number, percent } from '@/lib/format';
 import { taskHealth } from '@/lib/planning';
 import { dashboard } from '@/routes';
@@ -43,6 +46,12 @@ defineOptions({
 
 const page = usePage();
 const { can } = usePermissions();
+const { hasArrivedToday, clockIn, poste } = useLegacySession();
+
+function pointer() {
+    clockIn();
+    toast.success('Arrivée enregistrée.');
+}
 const user = computed(() => page.props.auth.user);
 const roles = computed(() => page.props.auth.roles);
 
@@ -138,7 +147,25 @@ const lowStock = stockItems.filter((s) => s.quantity < s.minimum);
             description="Vue d’ensemble de l’activité au 29/10/2026."
         >
             <StatusBadge :label="variantLabel[variant]" tone="brand" />
+            <Button v-if="hasArrivedToday" variant="outline" disabled>
+                <Clock /> Arrivée pointée
+            </Button>
+            <Button v-else @click="pointer"
+                ><Clock /> Pointer mon arrivée</Button
+            >
         </PageHeader>
+
+        <div
+            v-if="!hasArrivedToday"
+            class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand bg-brand/10 p-3 text-sm"
+            role="status"
+        >
+            <p>
+                Bonjour, {{ poste.title }} : pensez à pointer votre arrivée pour
+                aujourd’hui.
+            </p>
+            <Button size="sm" @click="pointer">Pointer mon arrivée</Button>
+        </div>
 
         <!-- ================= TERRAIN ================= -->
         <template v-if="variant === 'terrain'">

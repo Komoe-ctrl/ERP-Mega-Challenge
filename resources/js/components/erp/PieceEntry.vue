@@ -29,7 +29,7 @@ const props = defineProps<{
     onlyStatus?: PieceStatus[];
 }>();
 
-const { session } = useLegacySession();
+const { poste } = useLegacySession();
 const label = pieceKindLabels[props.kind];
 
 const pieces = ref<Piece[]>(
@@ -48,7 +48,7 @@ const blank = (): Piece => ({
     title: '',
     period: '2026-10',
     date: '2026-10-29',
-    requester: session.value.title,
+    requester: poste.value.title,
     bcNumber: '',
     observation: '',
     proof: '',
@@ -132,7 +132,7 @@ const nextStep = computed(() => {
 });
 const canAdvance = computed(
     () =>
-        nextStep.value !== null && nextStep.value.title === session.value.title,
+        nextStep.value !== null && nextStep.value.title === poste.value.title,
 );
 
 const statusTone: Record<
@@ -195,7 +195,7 @@ function validate() {
     if (isNew.value) {
         draft.value.history.push({
             at: '2026-10-29 09:00',
-            by: session.value.title,
+            by: poste.value.title,
             action: 'Saisie',
             comment: '',
         });
@@ -225,7 +225,7 @@ function advance() {
     draft.value.status = toStatus;
     draft.value.history.push({
         at: '2026-10-29 09:00',
-        by: session.value.title,
+        by: poste.value.title,
         action: nextStep.value.label,
         comment: '',
     });

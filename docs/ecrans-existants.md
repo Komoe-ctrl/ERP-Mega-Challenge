@@ -14,7 +14,7 @@ routes temporaires `/ecrans/{slug}` dans `routes/web.php`, aucun test ajouté).
 
 | Écran d'origine | Statut | Où |
 |---|---|---|
-| Identification (service, titre, mot de passe, Valider, Pointage, Fermer) | Créé | `/ecrans/identification`, `Legacy/screens/Identification.vue` ; lien depuis la connexion |
+| Identification | Remplacé : connexion simple (identifiant, mot de passe, mot de passe oublié) ; service, titre et droits viennent du compte ; sélecteur de poste dans l'en-tête ; « Pointer mon arrivée » sur le tableau de bord | `Login.vue`, `useLegacySession.ts`, `LegacyHeader.vue`, `Dashboard.vue` |
 | En-tête permanent (titre, service, exercice modifiable, logo) | Créé | `LegacyHeader.vue`, dans `AppSidebarLayout` |
 | Menu Tableau de bord / mensuel / Situation / TdB projets | Réutilisé + créé | Tableau de bord existant ; 3 écrans `Tableaux.vue` |
 | Menu Fichier (23 entrées + Quitter) | Créé | `LegacyHeader.vue`, `lib/legacyMenu.ts` |

@@ -15,11 +15,11 @@ import { useLegacySession } from '@/composables/useLegacySession';
 import { fichierMenu, href, topMenu } from '@/lib/legacyMenu';
 import { services } from '@/mocks/legacy';
 
-const { session } = useLegacySession();
+const { session, postes, poste } = useLegacySession();
 const { can } = usePermissions();
 
 const service = computed(
-    () => services.find((s) => s.id === session.value.serviceId) ?? services[0],
+    () => services.find((s) => s.id === poste.value.serviceId) ?? services[0],
 );
 const visibleFichier = computed(() =>
     fichierMenu.filter((item, index, all) =>
@@ -42,7 +42,19 @@ function quit() {
             data-test="legacy-header"
         >
             <AppLogoIcon class="size-6 shrink-0 fill-current text-brand" />
-            <p class="font-medium">{{ session.title }}</p>
+            <label v-if="postes.length > 1" class="flex items-center gap-1.5">
+                <span class="text-muted-foreground">Poste</span>
+                <select
+                    v-model.number="session.posteIndex"
+                    class="rounded-md border bg-background px-2 py-0.5"
+                    aria-label="Poste actif"
+                >
+                    <option v-for="(p, i) in postes" :key="i" :value="i">
+                        {{ p.title }}
+                    </option>
+                </select>
+            </label>
+            <p v-else class="font-medium">{{ poste.title }}</p>
             <span class="text-muted-foreground">·</span>
             <p class="text-muted-foreground">{{ service.shortName }}</p>
             <span class="text-muted-foreground">·</span>
@@ -57,12 +69,6 @@ function quit() {
                     aria-label="Exercice en cours"
                 />
             </label>
-            <Link
-                href="/ecrans/identification"
-                class="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-                Changer de poste
-            </Link>
         </div>
         <nav
             class="flex flex-wrap items-center gap-1 border-t px-3 py-1 text-sm"

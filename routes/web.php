@@ -36,14 +36,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 */
 
 // --- V3 : Clients (M2), Devis (M5), Marchés (M6), Situations (M11) ---------
-Route::middleware(['auth', 'verified', 'can:devis.view'])->prefix('devis')->name('devis.')->group(function () {
-    Route::inertia('/', 'Devis/Index')->name('index');
-    Route::get('{id}', fn (int $id) => Inertia::render('Devis/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
-Route::middleware(['auth', 'verified', 'can:marches.view'])->prefix('marches')->name('marches.')->group(function () {
-    Route::inertia('/', 'Marches/Index')->name('index');
-    Route::get('{id}', fn (int $id) => Inertia::render('Marches/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
 Route::middleware(['auth', 'verified', 'can:situations.view'])->prefix('situations')->name('situations.')->group(function () {
     Route::inertia('/', 'Situations/Index')->name('index');
     Route::get('{id}', fn (int $id) => Inertia::render('Situations/Show', ['id' => $id]))->whereNumber('id')->name('show');
@@ -103,3 +95,5 @@ require __DIR__.'/fournisseurs.php';
 require __DIR__.'/pieces.php';
 require __DIR__.'/stocks.php';
 require __DIR__.'/clients.php';
+require __DIR__.'/devis.php';
+require __DIR__.'/marches.php';

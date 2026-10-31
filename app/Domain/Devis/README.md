@@ -3,7 +3,7 @@
 Devis composés d'ouvrages et d'articles ; versions conservées ; marge prévue.
 
 - **Version de livraison** : V3
-- **État** : À faire (V3)
+- **État** : Branché au serveur (V3)
 - **Spécification** : RG5.1 à RG5.3, CA5. Cycle de vie : Brouillon, Soumis, Validé ou Refusé (cahier des charges, `docs/cahier-des-charges.pdf`)
 - **Permissions** : `devis.view`, `.create`, `.update`, `.validate`, `.delete`
 

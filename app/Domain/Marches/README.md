@@ -3,7 +3,7 @@
 Marchés, contrats, avenants, conditions de paiement.
 
 - **Version de livraison** : V3
-- **État** : À faire (V3)
+- **État** : Branché au serveur (V3)
 - **Spécification** : RG6.1 à RG6.3, CA6 (cahier des charges, `docs/cahier-des-charges.pdf`)
 - **Permissions** : `marches.view`, `.create`, `.update`, `.validate`, `.delete`
 

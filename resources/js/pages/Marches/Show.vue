@@ -1,47 +1,65 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import { computed, reactive, ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ContractController from '@/actions/App/Http/Controllers/Marches/ContractController';
 import EmptyState from '@/components/erp/EmptyState.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { computeSituation, contractTotals } from '@/lib/billing';
 import { dateFr, fcfa, TODAY } from '@/lib/format';
-import { projects } from '@/mocks/chantiers';
-import { contracts, quotes, situations } from '@/mocks/v3';
-import type { Contract } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+type Amendment = {
+    id: number;
+    number: string;
+    date: string;
+    label: string;
+    amount: number;
+    days: number;
+    validated: boolean;
+    canValidate: boolean;
+};
+
+const props = defineProps<{
+    contract: {
+        id: number;
+        number: string;
+        clientName: string;
+        projectName: string;
+        signedAt: string;
+        initialAmount: number;
+        updated: number;
+        amendmentsAmount: number;
+        days: number;
+        advanceRate: number;
+        retentionRate: number;
+        paymentDays: number;
+        deadlineDays: number;
+        projectId: number;
+        quoteId: number | null;
+        quoteNumber: string;
+        amendments: Amendment[];
+    };
+    situations: {
+        id: number;
+        number: number;
+        date: string;
+        status: string;
+        netTtc: number;
+    }[];
+    can: { amend: boolean };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Marchés', href: '/marches' }] },
 });
 
-const { can } = usePermissions();
-const contract = reactive<Contract>(
-    structuredClone(contracts.find((c) => c.id === props.id) ?? contracts[0]),
-);
 const amendmentOpen = ref(false);
-// CA6 : montant initial, avenants, montant actualisé et délai contractuel (recalculés en direct).
-const totals = computed(() => contractTotals(contract));
-const contractSituations = computed(() =>
-    situations.filter((s) => s.contractNumber === contract.number),
-);
-const project = computed(() =>
-    projects.find((p) =>
-        contract.projectName.startsWith(p.name.split(' — ')[0]),
-    ),
-);
-const quote = computed(() =>
-    quotes.find((q) =>
-        contract.projectName.startsWith(q.projectName.split(' — ')[0]),
-    ),
-);
+// CA6 : montant initial, avenants validés, montant actualisé et délai contractuel (calculés par le serveur, RG6.2).
+const contract = computed(() => props.contract);
 
 const fields: FieldDef[] = [
     {
@@ -58,11 +76,7 @@ const fields: FieldDef[] = [
         required: true,
         step: 1,
         unit: 'FCFA',
-        hint: 'Positif (plus-value) ou négatif (moins-value).',
-        validate: (v) =>
-            Number(v) === 0
-                ? 'Le montant ne peut pas être nul ; saisissez 0 jour si seul le délai change.'
-                : null,
+        hint: 'Positif (plus-value), négatif (moins-value) ou 0 si seul le délai change.',
     },
     {
         name: 'days',
@@ -72,25 +86,33 @@ const fields: FieldDef[] = [
         step: 1,
         unit: 'jours',
     },
-    { name: 'date', label: 'Date', type: 'date', required: true },
+    { name: 'amendment_date', label: 'Date', type: 'date', required: true },
 ];
 
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0] ?? 'Saisie invalide.');
+
 function addAmendment(v: FieldValues) {
-    contract.amendments.push({
-        number: `AV-0${contract.amendments.length + 1}`,
-        date: String(v.date),
-        label: String(v.label),
-        amount: Number(v.amount),
-        days: Number(v.days),
-        validated: false,
-    });
-    toast.success('Avenant enregistré, en attente de validation (maquette).');
+    router.post(
+        ContractController.storeAmendment.url(contract.value.id),
+        {
+            label: String(v.label),
+            amount: Number(v.amount),
+            days: Number(v.days),
+            amendment_date: String(v.amendment_date),
+        },
+        { preserveScroll: true, onError },
+    );
 }
 
-function validateAmendment(index: number) {
-    contract.amendments[index].validated = true;
-    toast.success(
-        'Avenant validé : le montant actualisé et le délai sont mis à jour.',
+function validateAmendment(amendment: Amendment) {
+    router.post(
+        ContractController.validateAmendment.url({
+            contract: contract.value.id,
+            amendment: amendment.id,
+        }),
+        {},
+        { preserveScroll: true, onError },
     );
 }
 </script>
@@ -103,14 +125,14 @@ function validateAmendment(index: number) {
             :title="contract.number"
             :description="`${contract.clientName} · ${contract.projectName} · signé le ${dateFr(contract.signedAt)}`"
         >
-            <Button v-if="project" variant="outline" as-child
-                ><Link :href="`/projets/${project.id}`"
+            <Button variant="outline" as-child
+                ><Link :href="`/projets/${contract.projectId}`"
                     >Voir le projet</Link
                 ></Button
             >
-            <Button v-if="quote" variant="outline" as-child
-                ><Link :href="`/devis/${quote.id}`"
-                    >Voir le devis {{ quote.number }}</Link
+            <Button v-if="contract.quoteId" variant="outline" as-child
+                ><Link :href="`/devis/${contract.quoteId}`"
+                    >Voir le devis {{ contract.quoteNumber }}</Link
                 ></Button
             >
         </PageHeader>
@@ -122,17 +144,17 @@ function validateAmendment(index: number) {
             />
             <KpiCard
                 label="Avenants validés"
-                :value="`${totals.amendmentsAmount >= 0 ? '+' : ''}${fcfa(totals.amendmentsAmount)}`"
+                :value="`${contract.amendmentsAmount >= 0 ? '+' : ''}${fcfa(contract.amendmentsAmount)}`"
                 tone="info"
             />
             <KpiCard
                 label="Montant actualisé"
-                :value="fcfa(totals.updatedAmount)"
+                :value="fcfa(contract.updated)"
                 tone="success"
             />
             <KpiCard
                 label="Délai contractuel"
-                :value="`${totals.contractualDays} jours`"
+                :value="`${contract.days} jours`"
                 :hint="`dont ${contract.deadlineDays} initiaux`"
             />
         </div>
@@ -159,7 +181,7 @@ function validateAmendment(index: number) {
                 <div class="mb-3 flex items-center justify-between gap-2">
                     <h2 class="font-display font-semibold">Avenants</h2>
                     <Button
-                        v-if="can('marches.create')"
+                        v-if="can.amend"
                         size="sm"
                         variant="outline"
                         @click="amendmentOpen = true"
@@ -168,8 +190,8 @@ function validateAmendment(index: number) {
                 </div>
                 <ul v-if="contract.amendments.length" class="divide-y text-sm">
                     <li
-                        v-for="(a, i) in contract.amendments"
-                        :key="a.number"
+                        v-for="a in contract.amendments"
+                        :key="a.id"
                         class="flex flex-wrap items-start justify-between gap-2 py-2.5"
                     >
                         <span>
@@ -188,9 +210,9 @@ function validateAmendment(index: number) {
                                 :tone="a.validated ? 'success' : 'warning'"
                             />
                             <Button
-                                v-if="!a.validated && can('marches.validate')"
+                                v-if="a.canValidate"
                                 size="sm"
-                                @click="validateAmendment(i)"
+                                @click="validateAmendment(a)"
                                 >Valider</Button
                             >
                         </span>
@@ -204,9 +226,9 @@ function validateAmendment(index: number) {
             <h2 class="mb-3 font-display font-semibold">
                 Situations de travaux
             </h2>
-            <ul v-if="contractSituations.length" class="divide-y text-sm">
+            <ul v-if="situations.length" class="divide-y text-sm">
                 <li
-                    v-for="s in contractSituations"
+                    v-for="s in situations"
                     :key="s.id"
                     class="flex flex-wrap items-center justify-between gap-2 py-2.5"
                 >
@@ -217,7 +239,7 @@ function validateAmendment(index: number) {
                     >
                     <span class="flex items-center gap-3">
                         <span class="tabular-nums"
-                            >{{ fcfa(computeSituation(s).netTtc) }} TTC</span
+                            >{{ fcfa(s.netTtc) }} TTC</span
                         >
                         <StatusBadge kind="situation" :status="s.status" />
                     </span>
@@ -229,7 +251,7 @@ function validateAmendment(index: number) {
         <FormDialog
             v-model:open="amendmentOpen"
             title="Nouvel avenant"
-            :initial="{ date: TODAY, days: 0 }"
+            :initial="{ amendment_date: TODAY, days: 0 }"
             :fields="fields"
             @submit="addAmendment"
         />

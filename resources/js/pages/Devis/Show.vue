@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { BookOpen, Copy, Handshake, Plus, Printer, Trash2 } from '@lucide/vue';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import QuoteController from '@/actions/App/Http/Controllers/Devis/QuoteController';
+import ContractController from '@/actions/App/Http/Controllers/Marches/ContractController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -10,43 +12,56 @@ import StatusBadge from '@/components/erp/StatusBadge.vue';
 import TabsNav from '@/components/erp/TabsNav.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { usePermissions } from '@/composables/usePermissions';
 import { quoteTotals, workTotal } from '@/lib/billing';
 import { dateFr, fcfa, number, percent } from '@/lib/format';
-import {
-    ouvrageComposition,
-    ouvrageCost,
-    ouvragePrice,
-    ouvrages,
-} from '@/mocks/library';
-import { contracts, quotes } from '@/mocks/v3';
 import type { QuoteDoc, QuoteStatus } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+type QuoteView = QuoteDoc & { refusalReason: string | null };
+
+const props = defineProps<{
+    quote: QuoteView;
+    contract: { id: number; number: string } | null;
+    versions: { id: number; version: number; status: string }[];
+    library: {
+        id: number;
+        label: string;
+        unit: string;
+        cost: number;
+        price: number;
+    }[];
+    can: {
+        update: boolean;
+        validate: boolean;
+        duplicate: boolean;
+        createContract: boolean;
+        submit: boolean;
+    };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Devis', href: '/devis' }] },
 });
 
-const { can } = usePermissions();
-const quote = reactive<QuoteDoc>(
-    structuredClone(quotes.find((q) => q.id === props.id) ?? quotes[0]),
+const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+// Copie locale modifiable ; elle est resynchronisée à chaque réponse du serveur.
+const quote = reactive<QuoteView>(copy(props.quote));
+
+watch(
+    () => props.quote,
+    (value) => Object.assign(quote, copy(value)),
 );
+
 const tab = ref('editeur');
 const refuseOpen = ref(false);
 const libraryOpen = ref(false);
 
-// L'édition n'est possible qu'en brouillon.
+// L'édition n'est possible qu'en brouillon (droit vérifié côté serveur).
 const editable = computed(
-    () => quote.status === 'brouillon' && can('devis.update'),
+    () => quote.status === 'brouillon' && props.can.update,
 );
 const totals = computed(() => quoteTotals(quote));
-const contract = computed(() =>
-    contracts.find((c) =>
-        c.projectName.startsWith(quote.projectName.split(' — ')[0]),
-    ),
-);
 
 // Contrôles de saisie affichés sous les lignes invalides.
 const lineIssue = (w: QuoteDoc['works'][number]) =>
@@ -66,7 +81,7 @@ const discountIssue = computed(() =>
 
 function addWork() {
     quote.works.push({
-        id: Date.now(),
+        id: -Date.now(),
         label: 'Nouvel ouvrage',
         unit: 'm²',
         quantity: 1,
@@ -75,17 +90,47 @@ function addWork() {
     });
 }
 
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0] ?? 'Saisie invalide.');
+
+/** Enregistre le brouillon puis enchaîne (soumission, ajout d'un ouvrage). */
+function save(then?: () => void) {
+    if (issues.value || discountIssue.value) {
+        toast.error('Corrigez les lignes signalées avant de continuer.');
+
+        return;
+    }
+
+    router.put(
+        QuoteController.update.url(quote.id),
+        {
+            discount_rate: quote.discountRate,
+            vat_rate: quote.vatRate,
+            direct_cost: quote.directCost,
+            works: quote.works.map((w) => ({
+                label: w.label,
+                unit: w.unit,
+                quantity: w.quantity,
+                unit_price: w.unitPrice,
+                components: w.components,
+                ouvrage_id: w.ouvrageId ?? null,
+            })),
+        },
+        { preserveScroll: true, onError, onSuccess: then },
+    );
+}
+
 // RG5.1 : un ouvrage de la bibliothèque a son prix calculé depuis sa composition.
-const libraryFields: FieldDef[] = [
+const libraryFields = computed<FieldDef[]>(() => [
     {
         name: 'ouvrage',
         label: 'Ouvrage',
         type: 'select',
         required: true,
         wide: true,
-        options: ouvrages.map((o) => ({
-            value: o.id,
-            label: `${o.label} — ${fcfa(ouvragePrice(o))} / ${o.unit}`,
+        options: props.library.map((o) => ({
+            value: String(o.id),
+            label: `${o.label} — ${fcfa(o.price)} / ${o.unit}`,
         })),
     },
     {
@@ -96,66 +141,47 @@ const libraryFields: FieldDef[] = [
         min: 0.01,
         step: 0.01,
     },
-];
+]);
 
 function addFromLibrary(v: FieldValues) {
-    const o = ouvrages.find((x) => x.id === Number(v.ouvrage));
-
-    if (o) {
-        quote.works.push({
-            id: Date.now(),
-            label: o.label,
-            unit: o.unit,
-            quantity: Number(v.quantity),
-            unitPrice: ouvragePrice(o),
-            components: ouvrageComposition(o),
-        });
-        toast.success(
-            `Ouvrage ajouté : déboursé sec ${fcfa(ouvrageCost(o))} / ${o.unit}, prix de vente ${fcfa(ouvragePrice(o))} (maquette).`,
-        );
-    }
+    save(() =>
+        router.post(
+            QuoteController.addOuvrage.url(quote.id),
+            { ouvrage_id: Number(v.ouvrage), quantity: Number(v.quantity) },
+            { preserveScroll: true, onError },
+        ),
+    );
 }
 
 function submitQuote() {
-    if (issues.value || discountIssue.value) {
-        toast.error(
-            'Corrigez les lignes signalées avant de soumettre le devis.',
-        );
-
-        return;
-    }
-
-    setStatus('soumis', 'Devis soumis pour validation.');
+    save(() =>
+        router.post(
+            QuoteController.submit.url(quote.id),
+            {},
+            { preserveScroll: true, onError },
+        ),
+    );
 }
 
-function setStatus(status: QuoteStatus, message: string) {
-    quote.status = status;
-    toast.success(message);
+function decide(action: 'validate' | 'version') {
+    router.post(
+        action === 'validate'
+            ? QuoteController.validateQuote.url(quote.id)
+            : QuoteController.newVersion.url(quote.id),
+        {},
+        { onError },
+    );
+}
+
+function onRefuse(reason: string) {
+    router.post(QuoteController.refuse.url(quote.id), { reason }, { onError });
 }
 
 function print() {
     window.print();
 }
 
-function onRefuse() {
-    setStatus(
-        'refuse',
-        'Devis refusé. Il peut être dupliqué en nouvelle version.',
-    );
-}
-
-function duplicate() {
-    toast.success(
-        `Nouvelle version v${quote.version + 1} créée en brouillon ; la version v${quote.version} est conservée (RG5.3).`,
-    );
-}
-
-function createContract() {
-    toast.success(
-        'Marché créé à partir du devis validé : le montant initial reprend celui du devis (RG6.1).',
-    );
-    router.visit('/marches');
-}
+const statusOf = (s: string) => s as QuoteStatus;
 </script>
 
 <template>
@@ -166,47 +192,60 @@ function createContract() {
             :title="`${quote.number} — version ${quote.version}`"
             :description="`${quote.clientName} · ${quote.projectName}`"
         >
-            <StatusBadge kind="quote" :status="quote.status" />
-            <Button v-if="editable" @click="submitQuote">Soumettre</Button>
+            <StatusBadge kind="quote" :status="statusOf(quote.status)" />
+            <Button v-if="editable" variant="outline" @click="save()"
+                >Enregistrer</Button
+            >
+            <Button v-if="can.submit" @click="submitQuote">Soumettre</Button>
             <Button
-                v-if="quote.status === 'soumis' && can('devis.validate')"
+                v-if="quote.status === 'soumis' && can.validate"
                 class="bg-success text-white hover:bg-success/90"
-                @click="
-                    setStatus(
-                        'valide',
-                        'Devis validé : il peut alimenter le marché.',
-                    )
-                "
+                @click="decide('validate')"
                 >Valider</Button
             >
             <Button
-                v-if="quote.status === 'soumis' && can('devis.validate')"
+                v-if="quote.status === 'soumis' && can.validate"
                 variant="outline"
                 class="text-destructive"
                 @click="refuseOpen = true"
                 >Refuser</Button
             >
             <Button
-                v-if="quote.status === 'refuse' && can('devis.create')"
+                v-if="can.duplicate"
                 variant="outline"
-                @click="duplicate"
+                @click="decide('version')"
                 ><Copy /> Dupliquer en nouvelle version</Button
             >
-            <Button
-                v-if="
-                    quote.status === 'valide' &&
-                    !contract &&
-                    can('marches.create')
-                "
-                @click="createContract"
-                ><Handshake /> Créer le marché</Button
+            <Button v-if="can.createContract" as-child
+                ><Link :href="ContractController.index.url()"
+                    ><Handshake /> Créer le marché</Link
+                ></Button
             >
             <Button v-if="contract" variant="outline" as-child
-                ><Link :href="`/marches/${contract.id}`"
+                ><Link :href="ContractController.show.url(contract.id)"
                     ><Handshake /> Voir le marché {{ contract.number }}</Link
                 ></Button
             >
         </PageHeader>
+
+        <p
+            v-if="quote.status === 'refuse' && quote.refusalReason"
+            class="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm"
+            role="status"
+        >
+            Motif du refus : {{ quote.refusalReason }}
+        </p>
+        <p v-if="versions.length > 1" class="text-sm text-muted-foreground">
+            Versions :
+            <template v-for="v in versions" :key="v.id">
+                <Link
+                    :href="QuoteController.show.url(v.id)"
+                    class="mr-2 underline"
+                    :class="v.id === quote.id ? 'font-semibold' : ''"
+                    >v{{ v.version }}</Link
+                >
+            </template>
+        </p>
 
         <TabsNav
             v-model="tab"

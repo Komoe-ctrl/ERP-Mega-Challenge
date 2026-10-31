@@ -3,59 +3,76 @@ import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
 import { ref } from 'vue';
 import { toast } from 'vue-sonner';
+import QuoteController from '@/actions/App/Http/Controllers/Devis/QuoteController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { quoteTotals } from '@/lib/billing';
+import { Input } from '@/components/ui/input';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa, percent } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { projects } from '@/mocks/chantiers';
-import { clients, quotes } from '@/mocks/v3';
-import type { QuoteDoc } from '@/types/erp';
+import type { Paginated } from '@/types';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type QuoteRow = {
+    id: number;
+    number: string;
+    version: number;
+    clientName: string;
+    projectName: string;
+    date: string;
+    status: string;
+    ht: number;
+    marginRate: number;
+};
+
+const props = defineProps<{
+    quotes: Paginated<QuoteRow>;
+    filters: { q: string; status: string };
+    clients: { id: number; name: string }[];
+    projects: { id: number; name: string; client_id: number }[];
+    can: { create: boolean };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Devis', href: '/devis' }] },
 });
 
-const { can } = usePermissions();
 const createOpen = ref(false);
+const search = ref(props.filters.q);
 
-type Row = QuoteDoc & { ht: number; marginRate: number };
-const rows: Row[] = quotes.map((q) => ({
-    ...q,
-    ht: quoteTotals(q).ht,
-    marginRate: quoteTotals(q).marginRate,
-}));
+function apply(changes: Partial<{ q: string; status: string }>) {
+    const next = { ...props.filters, ...changes };
 
+    router.get(
+        QuoteController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
+
+const clientName = (id: number) =>
+    props.clients.find((c) => c.id === id)?.name ?? '';
+
+// Le client est celui du projet choisi.
 const fields: FieldDef[] = [
     {
-        name: 'client',
-        label: 'Client',
-        type: 'select',
-        required: true,
-        options: clients.map((c) => ({ value: c.name, label: c.name })),
-        wide: true,
-    },
-    {
-        name: 'project',
+        name: 'project_id',
         label: 'Projet',
         type: 'select',
         required: true,
-        options: projects
-            .filter((p) =>
-                ['etude', 'devis', 'appel_offres'].includes(p.status),
-            )
-            .map((p) => ({ value: p.name, label: p.name })),
         wide: true,
+        options: props.projects.map((p) => ({
+            value: String(p.id),
+            label: `${p.name} — ${clientName(p.client_id)}`,
+        })),
         hint: 'Seuls les projets au stade étude, devis ou appel d’offres sont proposés.',
     },
     {
-        name: 'discount',
+        name: 'discount_rate',
         label: 'Remise',
         type: 'number',
         min: 0,
@@ -64,7 +81,7 @@ const fields: FieldDef[] = [
         unit: '%',
     },
     {
-        name: 'vat',
+        name: 'vat_rate',
         label: 'TVA',
         type: 'number',
         required: true,
@@ -76,19 +93,30 @@ const fields: FieldDef[] = [
 ];
 
 function create(v: FieldValues) {
-    toast.success(
-        `Devis créé en brouillon pour ${String(v.client)} (maquette). Ajoutez ses ouvrages depuis l’éditeur.`,
+    const project = props.projects.find((p) => p.id === Number(v.project_id));
+
+    router.post(
+        QuoteController.store.url(),
+        {
+            client_id: project?.client_id,
+            project_id: Number(v.project_id),
+            discount_rate: Number(v.discount_rate ?? 0),
+            vat_rate: Number(v.vat_rate),
+        },
+        {
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Saisie invalide.'),
+        },
     );
-    router.visit('/devis/3');
 }
 
-const columns: DataTableColumn<Row>[] = [
+const columns: DataTableColumn<QuoteRow>[] = [
     {
         accessorKey: 'number',
         header: 'Devis',
         cell: ({ row }) =>
             linkCell(
-                `/devis/${row.original.id}`,
+                QuoteController.show.url(row.original.id),
                 `${row.original.number} (v${row.original.version})`,
                 row.original.projectName,
             ),
@@ -112,19 +140,7 @@ const columns: DataTableColumn<Row>[] = [
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('quote', row.original.status),
-    },
-];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.quote).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
     },
 ];
 </script>
@@ -137,20 +153,57 @@ const filters: DataTableFilter[] = [
             title="Devis"
             description="Brouillon → soumis → validé ou refusé. Un devis refusé peut être dupliqué en nouvelle version."
         >
-            <Button v-if="can('devis.create')" @click="createOpen = true"
+            <Button v-if="can.create" @click="createOpen = true"
                 ><Plus /> Nouveau devis</Button
             >
         </PageHeader>
+
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher un devis…"
+                    aria-label="Rechercher un devis"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par statut"
+                :value="filters.status"
+                @change="
+                    apply({
+                        status: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Statut : tous</option>
+                <option
+                    v-for="(meta, value) in statuses.quote"
+                    :key="value"
+                    :value="value"
+                >
+                    {{ meta.label }}
+                </option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher un devis…"
+            :data="quotes.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun devis."
         />
+        <PaginationBar :page="quotes" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Nouveau devis"
-            :initial="{ vat: 18, discount: 0 }"
+            :initial="{ vat_rate: 18, discount_rate: 0 }"
             :fields="fields"
             submit-label="Créer le brouillon"
             @submit="create"

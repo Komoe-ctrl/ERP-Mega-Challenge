@@ -402,6 +402,7 @@ export type QuoteStatus = 'brouillon' | 'soumis' | 'valide' | 'refuse';
 
 export type WorkItem = {
     id: Id;
+    ouvrageId?: Id | null;
     label: string;
     unit: string;
     quantity: number;

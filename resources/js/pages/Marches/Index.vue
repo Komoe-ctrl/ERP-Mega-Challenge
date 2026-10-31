@@ -1,67 +1,72 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ContractController from '@/actions/App/Http/Controllers/Marches/ContractController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { contractTotals, quoteTotals } from '@/lib/billing';
+import { Input } from '@/components/ui/input';
 import { amountCell, linkCell } from '@/lib/cells';
 import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa, TODAY } from '@/lib/format';
-import { contracts, quotes } from '@/mocks/v3';
-import type { Contract } from '@/types/erp';
+import type { Paginated } from '@/types';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type ContractRow = {
+    id: number;
+    number: string;
+    clientName: string;
+    projectName: string;
+    signedAt: string;
+    initialAmount: number;
+    updated: number;
+    days: number;
+};
+
+const props = defineProps<{
+    contracts: Paginated<ContractRow>;
+    filters: { q: string };
+    signableQuotes: { id: number; label: string }[];
+    can: { create: boolean };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Marchés', href: '/marches' }] },
 });
 
-const { can } = usePermissions();
-const list = ref<Contract[]>(
-    contracts.map((c) => ({ ...c, amendments: [...c.amendments] })),
-);
 const createOpen = ref(false);
+const search = ref(props.filters.q);
 
-type Row = Contract & { updated: number; days: number };
-const rows = computed<Row[]>(() =>
-    list.value.map((c) => ({
-        ...c,
-        updated: contractTotals(c).updatedAmount,
-        days: contractTotals(c).contractualDays,
-    })),
-);
+function apply() {
+    router.get(
+        ContractController.index.url(),
+        search.value ? { q: search.value } : {},
+        { preserveState: true, replace: true },
+    );
+}
 
 // RG6.1 : un marché naît d'un devis validé ; son montant initial reprend celui du devis.
-const signable = computed(() =>
-    quotes.filter(
-        (q) =>
-            q.status === 'valide' &&
-            !list.value.some((c) =>
-                c.projectName.startsWith(q.projectName.split(' — ')[0]),
-            ),
-    ),
-);
-const fields = computed<FieldDef[]>(() => [
+const fields: FieldDef[] = [
     {
-        name: 'quote',
+        name: 'quote_id',
         label: 'Devis validé',
         type: 'select',
         required: true,
         wide: true,
-        options: signable.value.map((q) => ({
-            value: q.id,
-            label: `${q.number} — ${q.clientName} (${fcfa(quoteTotals(q).ht)} HT)`,
+        options: props.signableQuotes.map((q) => ({
+            value: String(q.id),
+            label: q.label,
         })),
-        hint: signable.value.length
+        hint: props.signableQuotes.length
             ? undefined
             : 'Aucun devis validé sans marché.',
     },
     {
-        name: 'signedAt',
+        name: 'signed_at',
         label: 'Date de signature',
         type: 'date',
         required: true,
@@ -71,7 +76,7 @@ const fields = computed<FieldDef[]>(() => [
                 : null,
     },
     {
-        name: 'deadline',
+        name: 'deadline_days',
         label: 'Délai contractuel',
         type: 'number',
         required: true,
@@ -80,7 +85,7 @@ const fields = computed<FieldDef[]>(() => [
         unit: 'jours',
     },
     {
-        name: 'advance',
+        name: 'advance_rate',
         label: 'Taux d’acompte',
         type: 'number',
         required: true,
@@ -90,7 +95,7 @@ const fields = computed<FieldDef[]>(() => [
         unit: '%',
     },
     {
-        name: 'retention',
+        name: 'retention_rate',
         label: 'Retenue de garantie',
         type: 'number',
         required: true,
@@ -100,7 +105,7 @@ const fields = computed<FieldDef[]>(() => [
         unit: '%',
     },
     {
-        name: 'paymentDays',
+        name: 'payment_days',
         label: 'Délai de paiement',
         type: 'number',
         required: true,
@@ -108,40 +113,33 @@ const fields = computed<FieldDef[]>(() => [
         step: 1,
         unit: 'jours',
     },
-]);
+];
 
 function create(v: FieldValues) {
-    const q = quotes.find((x) => x.id === Number(v.quote));
-
-    if (!q) {
-        return;
-    }
-
-    list.value.unshift({
-        id: Date.now(),
-        number: `MAR-2026-00${list.value.length + 1}`,
-        clientName: q.clientName,
-        projectName: q.projectName,
-        initialAmount: quoteTotals(q).ht,
-        signedAt: String(v.signedAt),
-        deadlineDays: Number(v.deadline),
-        advanceRate: Number(v.advance),
-        retentionRate: Number(v.retention),
-        paymentDays: Number(v.paymentDays),
-        amendments: [],
-    });
-    toast.success(
-        'Marché créé : le montant initial reprend celui du devis (maquette).',
+    router.post(
+        ContractController.store.url(),
+        {
+            quote_id: Number(v.quote_id),
+            signed_at: String(v.signed_at),
+            deadline_days: Number(v.deadline_days),
+            advance_rate: Number(v.advance_rate),
+            retention_rate: Number(v.retention_rate),
+            payment_days: Number(v.payment_days),
+        },
+        {
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Saisie invalide.'),
+        },
     );
 }
 
-const columns: DataTableColumn<Row>[] = [
+const columns: DataTableColumn<ContractRow>[] = [
     {
         accessorKey: 'number',
         header: 'Marché',
         cell: ({ row }) =>
             linkCell(
-                `/marches/${row.original.id}`,
+                ContractController.show.url(row.original.id),
                 row.original.number,
                 row.original.projectName,
             ),
@@ -176,21 +174,35 @@ const columns: DataTableColumn<Row>[] = [
     <div class="space-y-4 p-4">
         <PageHeader
             title="Marchés et contrats"
-            description="Un marché naît d’un devis validé ou d’un appel d’offres gagné ; ses avenants modifient le montant et le délai."
+            description="Un marché naît d’un devis validé ; ses avenants validés modifient le montant et le délai."
         >
-            <Button v-if="can('marches.create')" @click="createOpen = true"
+            <Button v-if="can.create" @click="createOpen = true"
                 ><Plus /> Nouveau marché</Button
             >
         </PageHeader>
+
+        <form class="max-w-xs" @submit.prevent="apply">
+            <Input
+                v-model="search"
+                type="search"
+                placeholder="Rechercher un marché…"
+                aria-label="Rechercher un marché"
+            />
+        </form>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            search-placeholder="Rechercher un marché…"
+            :data="contracts.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun marché."
         />
+        <PaginationBar :page="contracts" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Nouveau marché"
-            :initial="{ advance: 10, retention: 5, paymentDays: 30 }"
+            :initial="{ advance_rate: 10, retention_rate: 5, payment_days: 30 }"
             :fields="fields"
             @submit="create"
         />

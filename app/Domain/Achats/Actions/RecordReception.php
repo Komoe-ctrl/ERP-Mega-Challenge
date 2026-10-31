@@ -11,6 +11,7 @@ use App\Domain\Budget\Models\BudgetCommitment;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Shared\Support\BudgetLock;
 use App\Domain\Shared\Support\DocumentNumbers;
+use App\Domain\Stocks\Actions\EnterReceptionIntoStock;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\ValidationException;
@@ -26,6 +27,8 @@ use Illuminate\Validation\ValidationException;
 final class RecordReception
 {
     private const EPSILON = 0.0005;
+
+    public function __construct(private readonly EnterReceptionIntoStock $stock) {}
 
     /**
      * @param  list<array{purchase_order_line_id: int, delivered: float|int|string, returned: float|int|string}>  $lines
@@ -66,6 +69,7 @@ final class RecordReception
                     if ($accepted > self::EPSILON) {
                         $line->update(['received_quantity' => (float) $line->received_quantity + $accepted]);
                         $this->settle($line, $accepted, $budgetLines);
+                        $this->stock->line($reception, $line, $accepted, $by);
                     }
                 }
 

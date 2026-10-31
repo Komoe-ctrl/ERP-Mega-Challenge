@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             OrganizationSeeder::class,
             FiscalYearSeeder::class,
             PiecesSeeder::class,
+            StocksSeeder::class,
             AdminUserSeeder::class,
         ]);
 
@@ -31,6 +32,7 @@ class DatabaseSeeder extends Seeder
             $this->call(BudgetSeeder::class);
             $this->call(PurchaseRequestsSeeder::class);
             $this->call(SuppliersSeeder::class);
+            // Lots et composantes des projets de démonstration (imputation analytique des pièces).
             $this->call(PiecesSeeder::class);
         }
     }

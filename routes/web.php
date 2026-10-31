@@ -35,13 +35,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 |
 */
 
-// --- V2 : Stocks BTP (M9) ----------------------------------------------------
-Route::middleware(['auth', 'verified', 'can:stocks.view'])->prefix('stocks')->name('stocks.')->group(function () {
-    Route::inertia('/', 'Stocks/Index')->name('index');
-    Route::inertia('mouvements', 'Stocks/Mouvements')->name('mouvements');
-    Route::inertia('inventaire', 'Stocks/Inventaire')->name('inventaire');
-});
-
 // --- V3 : Clients (M2), Devis (M5), Marchés (M6), Situations (M11) ---------
 Route::middleware(['auth', 'verified', 'can:clients.view'])->prefix('clients')->name('clients.')->group(function () {
     Route::inertia('/', 'Clients/Index')->name('index');
@@ -112,3 +105,4 @@ require __DIR__.'/achats.php';
 require __DIR__.'/budget.php';
 require __DIR__.'/fournisseurs.php';
 require __DIR__.'/pieces.php';
+require __DIR__.'/stocks.php';

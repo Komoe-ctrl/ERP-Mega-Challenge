@@ -2,62 +2,13 @@
 
 declare(strict_types=1);
 
-use App\Domain\Achats\Actions\CreatePurchaseOrder;
-use App\Domain\Achats\Models\Article;
 use App\Domain\Achats\Models\PurchaseOrder;
-use App\Domain\Achats\Models\PurchaseRequest;
 use App\Domain\Achats\Models\Reception;
 use App\Domain\Achats\Models\SupplierInvoice;
-use App\Domain\Budget\Models\BudgetCommitment;
-use App\Domain\Budget\Models\BudgetLine;
-use App\Domain\Chantiers\Models\Chantier;
-use App\Domain\Fournisseurs\Models\Supplier;
 use App\Domain\Fournisseurs\Models\SupplierEvaluation;
-use App\Domain\Fournisseurs\Models\SupplierTariff;
 use App\Domain\Shared\Enums\RoleName;
 use App\Models\User;
-use Database\Seeders\SettingsSeeder;
-use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
-
-function receiver(RoleName $role = RoleName::ServiceAchatsBtp): User
-{
-    return userWithRole($role, ['two_factor_secret' => encrypt('s'), 'two_factor_recovery_codes' => encrypt(json_encode(['c'])), 'two_factor_confirmed_at' => now()]);
-}
-
-/**
- * Bon de commande de 100 unités à 10 000 FCFA (1 M), issu d'une demande validée dont
- * l'engagement est inscrit au budget du chantier.
- *
- * @return array{order: PurchaseOrder, line: BudgetLine, commitment: BudgetCommitment, supplier: Supplier, request: PurchaseRequest}
- */
-function openOrder(?int $tariff = null): array
-{
-    test()->seed(SettingsSeeder::class);
-    $chantier = Chantier::factory()->create(['status' => 'en_cours']);
-    $line = BudgetLine::factory()->create(['chantier_id' => $chantier->id, 'nature' => 'materiaux', 'initial_amount' => 100_000_000, 'revised_amount' => 100_000_000, 'committed_amount' => 1_000_000]);
-    $request = PurchaseRequest::factory()->withStatus('validee')->create(['chantier_id' => $chantier->id, 'budget_line_id' => $line->id, 'total_amount' => 1_000_000]);
-    $article = Article::factory()->create(['price' => 10_000, 'category' => 'Ciment']);
-    $request->lines()->create(['article_id' => $article->id, 'quantity' => 100, 'need_date' => '2026-12-01', 'urgency' => 'normale', 'frozen_price' => 10_000]);
-    $commitment = BudgetCommitment::query()->create(['chantier_id' => $chantier->id, 'budget_line_id' => $line->id, 'source_type' => $request->getMorphClass(), 'source_id' => $request->id, 'amount' => 1_000_000, 'status' => 'active']);
-    $supplier = Supplier::factory()->inCategories('Matériaux')->create();
-
-    if ($tariff !== null) {
-        SupplierTariff::query()->create(['supplier_id' => $supplier->id, 'article_id' => $article->id, 'price' => $tariff]);
-    }
-
-    $order = app(CreatePurchaseOrder::class)->direct($supplier, [['request_line_id' => $request->lines()->firstOrFail()->id, 'quantity' => 100]], receiver());
-
-    return ['order' => $order->load('lines'), 'line' => $line, 'commitment' => $commitment, 'supplier' => $supplier, 'request' => $request];
-}
-
-/** Réception de la première ligne du bon : livré, renvoyé. */
-function receive(PurchaseOrder $order, float $delivered, float $returned = 0, ?User $by = null): TestResponse
-{
-    return test()->actingAs($by ?? receiver())->post(route('achats.receptions.store', $order), [
-        'lines' => [['purchase_order_line_id' => $order->lines()->firstOrFail()->id, 'delivered' => $delivered, 'returned' => $returned]],
-    ]);
-}
 
 // ------------------------------------------------------------------ réception (RG8.9) et solde de l'engagement (RG10.1)
 

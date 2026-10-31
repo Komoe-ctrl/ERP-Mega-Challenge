@@ -1,21 +1,41 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { toast } from 'vue-sonner';
+import SituationController from '@/actions/App/Http/Controllers/Situations/SituationController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { computeSituation, contractTotals } from '@/lib/billing';
+import { Input } from '@/components/ui/input';
+import { computeSituation } from '@/lib/billing';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
+import type { DataTableColumn } from '@/lib/dataTable';
 import { dateFr, fcfa, percent, TODAY } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { ca11Example, contracts, situations } from '@/mocks/v3';
-import type { Situation } from '@/types/erp';
+import type { Paginated } from '@/types';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type SituationRow = {
+    id: number;
+    number: number;
+    contractNumber: string;
+    clientName: string;
+    date: string;
+    status: string;
+    progressCumul: number;
+    amount: number;
+    netTtc: number;
+};
+
+const props = defineProps<{
+    situations: Paginated<SituationRow>;
+    filters: { q: string; status: string };
+    contracts: { id: number; label: string }[];
+    can: { create: boolean };
+}>();
 
 defineOptions({
     layout: {
@@ -23,35 +43,39 @@ defineOptions({
     },
 });
 
-const { can } = usePermissions();
-const list = ref<Situation[]>(situations.map((s) => ({ ...s })));
 const createOpen = ref(false);
+const search = ref(props.filters.q);
 
-type Row = Situation & { amount: number; netTtc: number };
-const rows = computed<Row[]>(() =>
-    list.value.map((s) => ({
-        ...s,
-        amount: computeSituation(s).amount,
-        netTtc: computeSituation(s).netTtc,
-    })),
-);
-const example = computeSituation(ca11Example);
+function apply(changes: Partial<{ q: string; status: string }>) {
+    const next = { ...props.filters, ...changes };
 
-const lastOf = (contractNumber: string) =>
-    list.value
-        .filter((s) => s.contractNumber === contractNumber)
-        .sort((a, b) => b.number - a.number)[0];
+    router.get(
+        SituationController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
 
-const fields = computed<FieldDef[]>(() => [
+// Exemple du cahier des charges (CA11), calculé avec la même formule que le serveur.
+const example = computeSituation({
+    marketAmount: 100_000_000,
+    progressCumul: 40,
+    previousProgress: 30,
+    retentionRate: 5,
+    advanceRefundRate: 10,
+    vatRate: 18,
+});
+
+const fields: FieldDef[] = [
     {
-        name: 'contract',
+        name: 'contract_id',
         label: 'Marché',
         type: 'select',
         required: true,
         wide: true,
-        options: contracts.map((c) => ({
-            value: c.number,
-            label: `${c.number} — ${c.clientName}`,
+        options: props.contracts.map((c) => ({
+            value: String(c.id),
+            label: c.label,
         })),
     },
     {
@@ -63,57 +87,38 @@ const fields = computed<FieldDef[]>(() => [
         max: 100,
         step: 0.5,
         unit: '%',
-        validate: (v, values) => {
-            const last = lastOf(String(values.contract));
-
-            return last && Number(v) < last.progressCumul
-                ? `L’avancement ne peut pas être inférieur à celui de la situation n°${last.number} (${last.progressCumul} %).`
-                : null;
-        },
+        hint: 'Il ne peut pas être inférieur à celui de la situation précédente.',
     },
     {
-        name: 'date',
+        name: 'situation_date',
         label: 'Date de la situation',
         type: 'date',
         required: true,
     },
-]);
+];
 
 function create(v: FieldValues) {
-    const contract = contracts.find((c) => c.number === v.contract);
-
-    if (!contract) {
-        return;
-    }
-
-    const last = lastOf(contract.number);
-
-    list.value.push({
-        id: Date.now(),
-        contractNumber: contract.number,
-        clientName: contract.clientName,
-        number: (last?.number ?? 0) + 1,
-        date: String(v.date),
-        progressCumul: Number(v.progress),
-        previousProgress: last?.progressCumul ?? 0,
-        marketAmount: contractTotals(contract).updatedAmount,
-        status: 'brouillon',
-        retentionRate: contract.retentionRate,
-        advanceRefundRate: contract.advanceRate,
-        vatRate: 18,
-    });
-    toast.success(
-        'Situation créée en brouillon : les taux viennent du marché (maquette).',
+    router.post(
+        SituationController.store.url(),
+        {
+            contract_id: Number(v.contract_id),
+            progress: Number(v.progress),
+            situation_date: String(v.situation_date),
+        },
+        {
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Saisie invalide.'),
+        },
     );
 }
 
-const columns: DataTableColumn<Row>[] = [
+const columns: DataTableColumn<SituationRow>[] = [
     {
         accessorKey: 'number',
         header: 'Situation',
         cell: ({ row }) =>
             linkCell(
-                `/situations/${row.original.id}`,
+                SituationController.show.url(row.original.id),
                 `n°${row.original.number}`,
                 row.original.contractNumber,
             ),
@@ -142,19 +147,7 @@ const columns: DataTableColumn<Row>[] = [
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('situation', row.original.status),
-    },
-];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.situation).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
     },
 ];
 </script>
@@ -167,16 +160,52 @@ const filters: DataTableFilter[] = [
             title="Situations de travaux"
             description="Factures intermédiaires calculées sur l’avancement réel. Une situation validée est figée ; une correction passe par la suivante (RG11.3)."
         >
-            <Button v-if="can('situations.create')" @click="createOpen = true"
+            <Button v-if="can.create" @click="createOpen = true"
                 ><Plus /> Nouvelle situation</Button
             >
         </PageHeader>
+
+        <div class="flex flex-wrap gap-3">
+            <form
+                class="flex-1 sm:max-w-xs"
+                @submit.prevent="apply({ q: search })"
+            >
+                <Input
+                    v-model="search"
+                    type="search"
+                    placeholder="Rechercher une situation…"
+                    aria-label="Rechercher une situation"
+                />
+            </form>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par statut"
+                :value="filters.status"
+                @change="
+                    apply({
+                        status: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Statut : tous</option>
+                <option
+                    v-for="(meta, value) in statuses.situation"
+                    :key="value"
+                    :value="value"
+                >
+                    {{ meta.label }}
+                </option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher une situation…"
+            :data="situations.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucune situation."
         />
+        <PaginationBar :page="situations" />
 
         <aside class="rounded-xl border bg-card p-4 text-sm shadow-xs">
             <h2 class="mb-1 font-display font-semibold">
@@ -198,7 +227,7 @@ const filters: DataTableFilter[] = [
         <FormDialog
             v-model:open="createOpen"
             title="Nouvelle situation"
-            :initial="{ date: TODAY }"
+            :initial="{ situation_date: TODAY }"
             :fields="fields"
             @submit="create"
         />

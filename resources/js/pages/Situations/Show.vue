@@ -1,22 +1,47 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Lock, Printer } from '@lucide/vue';
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import ContractController from '@/actions/App/Http/Controllers/Marches/ContractController';
+import SituationController from '@/actions/App/Http/Controllers/Situations/SituationController';
 import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
+import EmptyState from '@/components/erp/EmptyState.vue';
+import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { usePermissions } from '@/composables/usePermissions';
-import { computeSituation, workTotal } from '@/lib/billing';
-import { dateFr, fcfa, percent } from '@/lib/format';
-import { contracts, quotes, situations } from '@/mocks/v3';
-import { ref } from 'vue';
-import type { Situation } from '@/types/erp';
+import { computeSituation } from '@/lib/billing';
+import { dateFr, fcfa, percent, TODAY } from '@/lib/format';
+import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+type Calc = ReturnType<typeof computeSituation>;
+
+const props = defineProps<{
+    situation: {
+        id: number;
+        number: number;
+        contractId: number;
+        contractNumber: string;
+        clientName: string;
+        date: string;
+        status: 'brouillon' | 'validee' | 'payee';
+        progressCumul: number;
+        previousProgress: number;
+        marketAmount: number;
+        retentionRate: number;
+        advanceRefundRate: number;
+        vatRate: number;
+        calc: Calc;
+        paid: number;
+        remaining: number;
+    };
+    works: { id: number; label: string; total: number; progress: number }[];
+    payments: { id: number; date: string; amount: number; reference: string }[];
+    can: { update: boolean; validate: boolean; pay: boolean };
+}>();
 
 defineOptions({
     layout: {
@@ -24,43 +49,44 @@ defineOptions({
     },
 });
 
-const { can } = usePermissions();
-const situation = reactive<Situation>(
-    structuredClone(situations.find((s) => s.id === props.id) ?? situations[0]),
-);
+const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+// Copie locale modifiable ; elle est resynchronisée à chaque réponse du serveur.
+const situation = reactive(copy(props.situation));
+const workProgress = reactive<Record<number, number>>({});
+
+function reset() {
+    Object.assign(situation, copy(props.situation));
+
+    for (const w of props.works) {
+        workProgress[w.id] = w.progress;
+    }
+}
+
+reset();
+watch(() => [props.situation, props.works], reset);
+
 const locked = computed(() => situation.status !== 'brouillon');
 const validateOpen = ref(false);
-
-const contract = computed(() =>
-    contracts.find((c) => c.number === situation.contractNumber),
-);
-// RG11.1 : avancement par ouvrage (devis du marché) ; sans devis, un seul curseur global.
-const works = computed(
-    () =>
-        quotes.find(
-            (q) =>
-                contract.value &&
-                contract.value.projectName.startsWith(
-                    q.projectName.split(' — ')[0],
-                ),
-        )?.works ?? [],
-);
-const workProgress = reactive<Record<number, number>>(
-    Object.fromEntries(works.value.map((w) => [w.id, situation.progressCumul])),
-);
+const paymentOpen = ref(false);
 const totalWorks = computed(() =>
-    works.value.reduce((s, w) => s + workTotal(w), 0),
+    props.works.reduce((sum, w) => sum + w.total, 0),
 );
 
+// RG11.1 : avancement par ouvrage (devis du marché) ; sans ouvrage, un seul curseur global.
 const progress = computed(() => {
-    if (!works.value.length || locked.value) {
+    if (!props.works.length || locked.value) {
         return situation.progressCumul;
+    }
+
+    if (totalWorks.value === 0) {
+        return 0;
     }
 
     return (
         Math.round(
-            (works.value.reduce(
-                (s, w) => s + workTotal(w) * (workProgress[w.id] ?? 0),
+            (props.works.reduce(
+                (sum, w) => sum + w.total * (workProgress[w.id] ?? 0),
                 0,
             ) /
                 totalWorks.value) *
@@ -68,11 +94,17 @@ const progress = computed(() => {
         ) / 10
     );
 });
-const calc = computed(() =>
-    computeSituation({ ...situation, progressCumul: progress.value }),
+
+// Brouillon : calcul en direct ; situation figée : valeurs du serveur.
+const calc = computed<Calc>(() =>
+    locked.value
+        ? props.situation.calc
+        : computeSituation({
+              ...situation,
+              progressCumul: progress.value,
+          }),
 );
 
-// L'avancement cumulé ne peut pas diminuer d'une situation à l'autre.
 const progressIssue = computed(() =>
     progress.value < situation.previousProgress
         ? `L’avancement cumulé (${progress.value} %) ne peut pas être inférieur à celui de la situation précédente (${situation.previousProgress} %).`
@@ -83,16 +115,45 @@ const ratesIssue = computed(() =>
     situation.retentionRate > 100 ||
     situation.advanceRefundRate < 0 ||
     situation.advanceRefundRate > 100 ||
-    situation.vatRate < 0
+    situation.vatRate < 0 ||
+    situation.vatRate > 100
         ? 'Les taux doivent être compris entre 0 et 100 %.'
         : '',
 );
 
+const onError = (errors: Record<string, string>) =>
+    toast.error(Object.values(errors)[0] ?? 'Saisie invalide.');
+
+/** Enregistre le brouillon puis enchaîne (validation). */
+function save(then?: () => void) {
+    if (progressIssue.value || ratesIssue.value) {
+        toast.error('Corrigez les valeurs signalées avant de continuer.');
+
+        return;
+    }
+
+    router.put(
+        SituationController.update.url(situation.id),
+        {
+            situation_date: situation.date,
+            ...(props.works.length
+                ? { works: { ...workProgress } }
+                : { progress: situation.progressCumul }),
+            retention_rate: situation.retentionRate,
+            advance_refund_rate: situation.advanceRefundRate,
+            vat_rate: situation.vatRate,
+        },
+        { preserveScroll: true, onError, onSuccess: then },
+    );
+}
+
 function validate() {
-    situation.progressCumul = progress.value;
-    situation.status = 'validee';
-    toast.success(
-        `Situation n°${situation.number} validée et figée : une correction passera par la suivante.`,
+    save(() =>
+        router.post(
+            SituationController.validateSituation.url(situation.id),
+            {},
+            { preserveScroll: true, onError },
+        ),
     );
 }
 
@@ -104,6 +165,39 @@ function askValidate() {
     }
 
     validateOpen.value = true;
+}
+
+const paymentFields = computed<FieldDef[]>(() => [
+    {
+        name: 'amount',
+        label: 'Montant reçu',
+        type: 'number',
+        required: true,
+        min: 1,
+        max: props.situation.remaining,
+        step: 1,
+        unit: 'FCFA',
+        hint: `Solde restant dû : ${fcfa(props.situation.remaining)}.`,
+    },
+    {
+        name: 'paid_at',
+        label: 'Date du paiement',
+        type: 'date',
+        required: true,
+    },
+    { name: 'reference', label: 'Référence (virement, chèque…)' },
+]);
+
+function addPayment(v: FieldValues) {
+    router.post(
+        SituationController.storePayment.url(situation.id),
+        {
+            amount: Number(v.amount),
+            paid_at: String(v.paid_at),
+            reference: v.reference ? String(v.reference) : null,
+        },
+        { preserveScroll: true, onError },
+    );
 }
 
 function print() {
@@ -120,19 +214,25 @@ function print() {
             :description="`${situation.contractNumber} · ${situation.clientName} · ${dateFr(situation.date)}`"
         >
             <StatusBadge kind="situation" :status="situation.status" />
-            <Button v-if="contract" variant="outline" as-child
-                ><Link :href="`/marches/${contract.id}`"
+            <Button variant="outline" as-child
+                ><Link :href="ContractController.show.url(situation.contractId)"
                     >Voir le marché</Link
                 ></Button
             >
             <Button variant="outline" @click="print"
                 ><Printer /> Imprimer</Button
             >
+            <Button v-if="can.update" variant="outline" @click="save()"
+                >Enregistrer</Button
+            >
             <Button
-                v-if="!locked && can('situations.validate')"
+                v-if="can.validate"
                 class="bg-success text-white hover:bg-success/90"
                 @click="askValidate"
                 >Valider et figer</Button
+            >
+            <Button v-if="can.pay" @click="paymentOpen = true"
+                >Enregistrer un paiement</Button
             >
         </PageHeader>
 
@@ -165,7 +265,7 @@ function print() {
                             <tr v-for="w in works" :key="w.id" class="border-t">
                                 <td class="py-1.5 pr-2">{{ w.label }}</td>
                                 <td class="py-1.5 text-right tabular-nums">
-                                    {{ fcfa(workTotal(w)) }}
+                                    {{ fcfa(w.total) }}
                                 </td>
                                 <td class="py-1.5 text-right">
                                     <Input
@@ -179,7 +279,7 @@ function print() {
                                         :aria-label="`Avancement cumulé : ${w.label}`"
                                     />
                                     <span v-else class="tabular-nums">{{
-                                        percent(situation.progressCumul)
+                                        percent(w.progress)
                                     }}</span>
                                 </td>
                             </tr>
@@ -244,6 +344,7 @@ function print() {
                             v-model.number="situation.vatRate"
                             type="number"
                             min="0"
+                            max="100"
                             :disabled="locked"
                     /></label>
                 </div>
@@ -323,8 +424,36 @@ function print() {
             </section>
         </div>
 
+        <section v-if="locked" class="rounded-xl border bg-card p-4 shadow-xs">
+            <div class="mb-3 flex items-center justify-between gap-2">
+                <h2 class="font-display font-semibold">Paiements reçus</h2>
+                <p class="text-sm text-muted-foreground tabular-nums">
+                    Reçu {{ fcfa(situation.paid) }} · reste
+                    {{ fcfa(situation.remaining) }}
+                </p>
+            </div>
+            <ul v-if="payments.length" class="divide-y text-sm">
+                <li
+                    v-for="p in payments"
+                    :key="p.id"
+                    class="flex flex-wrap justify-between gap-2 py-2"
+                >
+                    <span
+                        >{{ dateFr(p.date) }}
+                        <span class="text-muted-foreground">{{
+                            p.reference
+                        }}</span></span
+                    >
+                    <span class="tabular-nums">{{ fcfa(p.amount) }}</span>
+                </li>
+            </ul>
+            <EmptyState v-else compact title="Aucun paiement" />
+        </section>
+
         <Button variant="ghost" as-child
-            ><Link href="/situations">Retour à la liste</Link></Button
+            ><Link :href="SituationController.index.url()"
+                >Retour à la liste</Link
+            ></Button
         >
 
         <ConfirmDialog
@@ -333,6 +462,14 @@ function print() {
             description="Une situation validée est numérotée et figée : elle ne pourra plus être modifiée. Une correction passera par la situation suivante (RG11.3)."
             confirm-label="Valider et figer"
             @confirm="validate"
+        />
+        <FormDialog
+            v-model:open="paymentOpen"
+            title="Enregistrer un paiement"
+            :initial="{ paid_at: TODAY }"
+            :fields="paymentFields"
+            submit-label="Enregistrer"
+            @submit="addPayment"
         />
     </div>
 </template>

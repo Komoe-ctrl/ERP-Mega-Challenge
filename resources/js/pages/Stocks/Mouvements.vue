@@ -1,21 +1,49 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
 import { computed, h, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import MovementController from '@/actions/App/Http/Controllers/Stocks/MovementController';
 import DataTable from '@/components/DataTable.vue';
+import ConfirmDialog from '@/components/erp/ConfirmDialog.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
-import { dateFr, number, TODAY } from '@/lib/format';
+import type { DataTableColumn } from '@/lib/dataTable';
+import { dateFr, number } from '@/lib/format';
 import type { Tone } from '@/lib/status';
-import { chantiers } from '@/mocks/chantiers';
-import { stockItems, stockMovements } from '@/mocks/v2';
-import type { StockMovement } from '@/types/erp';
+import type { Paginated } from '@/types';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type Movement = {
+    id: number;
+    date: string;
+    type: string;
+    item: string;
+    unit: string;
+    quantity: number;
+    direction: string;
+    warehouse: string;
+    destination: string | null;
+    chantier: string | null;
+    reason: string | null;
+    status: 'valide' | 'en_attente' | 'rejete';
+    author: string;
+    unitCost: number;
+    canDecide: boolean;
+};
+
+const props = defineProps<{
+    movements: Paginated<Movement>;
+    filters: { type: string; magasin: string };
+    warehouses: { id: number; name: string; type: string }[];
+    articles: { id: number; label: string; unit: string }[];
+    chantiers: { id: number; name: string }[];
+    types: { value: string; label: string }[];
+    can: { record: boolean };
+}>();
 
 defineOptions({
     layout: {
@@ -26,22 +54,31 @@ defineOptions({
     },
 });
 
-const { can } = usePermissions();
-const rows = ref<StockMovement[]>(stockMovements.map((m) => ({ ...m })));
 const createOpen = ref(false);
+const rejecting = ref<Movement | null>(null);
 
-const types: Record<StockMovement['type'], { label: string; tone: Tone }> = {
-    entree: { label: 'Entrée', tone: 'success' },
-    sortie: { label: 'Sortie', tone: 'info' },
-    transfert: { label: 'Transfert', tone: 'brand' },
-    inventaire: { label: 'Inventaire', tone: 'neutral' },
-    retour: { label: 'Retour', tone: 'warning' },
-    perte: { label: 'Perte', tone: 'danger' },
-    ajustement: { label: 'Ajustement', tone: 'warning' },
+const tones: Record<string, Tone> = {
+    entree: 'success',
+    sortie: 'info',
+    transfert: 'brand',
+    inventaire: 'neutral',
+    retour: 'warning',
+    perte: 'danger',
+    ajustement: 'warning',
+};
+const typeLabel = (value: string): string =>
+    props.types.find((t) => t.value === value)?.label ??
+    (value === 'inventaire' ? 'Inventaire' : value);
+
+const statusMeta = {
+    valide: { label: 'Validé', tone: 'success' as Tone },
+    en_attente: { label: 'En attente de validation', tone: 'warning' as Tone },
+    rejete: { label: 'Rejeté', tone: 'danger' as Tone },
 };
 
-const warehouses = [...new Set(stockItems.map((s) => s.warehouse))];
-const needsReason = ['perte', 'ajustement'];
+const warehouseOptions = computed(() =>
+    props.warehouses.map((w) => ({ value: String(w.id), label: w.name })),
+);
 
 const fields = computed<FieldDef[]>(() => [
     {
@@ -49,19 +86,18 @@ const fields = computed<FieldDef[]>(() => [
         label: 'Opération',
         type: 'select',
         required: true,
-        options: Object.entries(types)
-            .filter(([k]) => k !== 'inventaire')
-            .map(([value, t]) => ({ value, label: t.label })),
+        options: props.types,
     },
     {
-        name: 'item',
+        name: 'article_id',
         label: 'Article',
         type: 'select',
         required: true,
-        options: [...new Set(stockItems.map((s) => s.label))].map((l) => ({
-            value: l,
-            label: l,
+        options: props.articles.map((a) => ({
+            value: String(a.id),
+            label: `${a.label} (${a.unit})`,
         })),
+        wide: true,
     },
     {
         name: 'quantity',
@@ -73,75 +109,114 @@ const fields = computed<FieldDef[]>(() => [
         hint: 'Quantité décimale acceptée (m³, kg…).',
     },
     {
-        name: 'warehouse',
+        name: 'warehouse_id',
         label: 'Magasin',
         type: 'select',
         required: true,
-        options: warehouses.map((w) => ({ value: w, label: w })),
+        options: warehouseOptions.value,
     },
     {
-        name: 'destination',
+        name: 'destination_warehouse_id',
         label: 'Destination (transfert)',
         type: 'select',
-        options: warehouses.map((w) => ({ value: w, label: w })),
+        options: warehouseOptions.value,
         validate: (v, values) =>
-            values.type === 'transfert' && (!v || v === values.warehouse)
+            values.type === 'transfert' && (!v || v === values.warehouse_id)
                 ? 'Choisissez un magasin de destination différent.'
                 : null,
     },
     {
-        name: 'chantier',
-        label: 'Chantier (sortie)',
+        name: 'chantier_id',
+        label: 'Chantier (sortie ou retour)',
         type: 'select',
-        options: chantiers
-            .filter((c) => c.status === 'en_cours')
-            .map((c) => ({ value: c.name, label: c.name })),
+        options: props.chantiers.map((c) => ({
+            value: String(c.id),
+            label: c.name,
+        })),
         validate: (v, values) =>
             values.type === 'sortie' && !v
                 ? 'Une sortie est imputée à un chantier (coût réel, RG9.2).'
                 : null,
     },
     {
+        name: 'unit_cost',
+        label: 'Coût unitaire (entrée)',
+        type: 'number',
+        min: 1,
+        step: 1,
+        unit: 'FCFA',
+        validate: (v, values) =>
+            values.type === 'entree' && !v
+                ? 'Indiquez le coût unitaire : le stock est valorisé au coût moyen pondéré.'
+                : null,
+    },
+    {
+        name: 'direction',
+        label: 'Sens (ajustement)',
+        type: 'select',
+        options: [
+            { value: 'in', label: 'Augmente le stock' },
+            { value: 'out', label: 'Diminue le stock' },
+        ],
+        validate: (v, values) =>
+            values.type === 'ajustement' && !v
+                ? 'Indiquez si l’ajustement augmente ou diminue le stock.'
+                : null,
+    },
+    {
         name: 'reason',
         label: 'Motif',
         type: 'textarea',
+        wide: true,
         validate: (v, values) =>
-            needsReason.includes(String(values.type)) && !String(v ?? '').trim()
+            ['perte', 'ajustement'].includes(String(values.type)) &&
+            !String(v ?? '').trim()
                 ? 'Un motif est obligatoire pour une perte ou un ajustement (RG9.3).'
                 : null,
     },
 ]);
 
 function create(v: FieldValues) {
-    const type = String(v.type) as StockMovement['type'];
-    const item = stockItems.find((s) => s.label === v.item);
-
-    rows.value.unshift({
-        id: Date.now(),
-        date: TODAY,
-        type,
-        label: String(v.item),
-        quantity: Number(v.quantity),
-        unit: item?.unit ?? '',
-        from: String(v.warehouse),
-        to:
-            type === 'transfert'
-                ? String(v.destination)
-                : type === 'sortie'
-                  ? `Chantier ${String(v.chantier)}`
-                  : '—',
-        chantier: v.chantier ? String(v.chantier) : undefined,
-        author: 'Vous',
-        reason: v.reason ? String(v.reason) : undefined,
-    });
-    toast.success(
-        needsReason.includes(type)
-            ? 'Mouvement enregistré, en attente de validation ; visible dans le journal des activités (maquette).'
-            : 'Mouvement enregistré (maquette).',
+    router.post(
+        MovementController.store.url(),
+        Object.fromEntries(
+            Object.entries(v).filter(
+                ([, value]) => value !== '' && value !== null,
+            ),
+        ) as Record<string, string | number>,
+        {
+            preserveScroll: true,
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Mouvement refusé.'),
+        },
     );
 }
 
-const columns: DataTableColumn<StockMovement>[] = [
+const act = (url: string) => router.post(url, {}, { preserveScroll: true });
+
+function reject(reason: string) {
+    if (!rejecting.value) {
+        return;
+    }
+
+    router.post(
+        MovementController.reject.url(rejecting.value.id),
+        { reason },
+        { preserveScroll: true },
+    );
+}
+
+function applyFilters(changes: Partial<{ type: string; magasin: string }>) {
+    const next = { ...props.filters, ...changes };
+
+    router.get(
+        MovementController.index.url(),
+        Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')),
+        { preserveState: true, replace: true },
+    );
+}
+
+const columns: DataTableColumn<Movement>[] = [
     {
         accessorKey: 'date',
         header: 'Date',
@@ -150,10 +225,13 @@ const columns: DataTableColumn<StockMovement>[] = [
     {
         accessorKey: 'type',
         header: 'Opération',
-        filterFn: 'equalsString',
-        cell: ({ row }) => h(StatusBadge, types[row.original.type]),
+        cell: ({ row }) =>
+            h(StatusBadge, {
+                label: typeLabel(row.original.type),
+                tone: tones[row.original.type] ?? 'neutral',
+            }),
     },
-    { accessorKey: 'label', header: 'Article' },
+    { accessorKey: 'item', header: 'Article' },
     {
         accessorKey: 'quantity',
         header: 'Quantité',
@@ -161,31 +239,57 @@ const columns: DataTableColumn<StockMovement>[] = [
             h(
                 'span',
                 { class: 'tabular-nums' },
-                `${number(row.original.quantity, row.original.quantity % 1 ? 3 : 0)} ${row.original.unit}`,
+                `${row.original.direction === 'in' ? '+' : '−'}${number(row.original.quantity, row.original.quantity % 1 ? 3 : 0)} ${row.original.unit}`,
             ),
     },
     {
         id: 'route',
         header: 'De → vers',
-        accessorFn: (m) => `${m.from} ${m.to}`,
-        cell: ({ row }) => `${row.original.from} → ${row.original.to}`,
+        cell: ({ row }) =>
+            `${row.original.warehouse} → ${row.original.destination ?? (row.original.chantier ? `Chantier ${row.original.chantier}` : '—')}`,
     },
     { accessorKey: 'author', header: 'Par' },
+    {
+        accessorKey: 'status',
+        header: 'État',
+        cell: ({ row }) => h(StatusBadge, statusMeta[row.original.status]),
+    },
     {
         accessorKey: 'reason',
         header: 'Motif',
         cell: ({ row }) => row.original.reason ?? '—',
     },
-];
-
-const filters: DataTableFilter[] = [
     {
-        columnId: 'type',
-        label: 'Opération',
-        options: Object.entries(types).map(([value, t]) => ({
-            value,
-            label: t.label,
-        })),
+        id: 'actions',
+        header: '',
+        enableSorting: false,
+        cell: ({ row }) =>
+            row.original.canDecide
+                ? h('div', { class: 'flex gap-2' }, [
+                      h(
+                          Button,
+                          {
+                              size: 'sm',
+                              onClick: () =>
+                                  act(
+                                      MovementController.validateMovement.url(
+                                          row.original.id,
+                                      ),
+                                  ),
+                          },
+                          () => 'Valider',
+                      ),
+                      h(
+                          Button,
+                          {
+                              size: 'sm',
+                              variant: 'outline',
+                              onClick: () => (rejecting.value = row.original),
+                          },
+                          () => 'Rejeter',
+                      ),
+                  ])
+                : null,
     },
 ];
 </script>
@@ -198,22 +302,73 @@ const filters: DataTableFilter[] = [
             title="Mouvements de stock"
             description="Entrées, sorties vers chantier (imputées en coût réel), transferts, retours, pertes et ajustements."
         >
-            <Button v-if="can('stocks.create')" @click="createOpen = true"
+            <Button v-if="can.record" @click="createOpen = true"
                 ><Plus /> Nouveau mouvement</Button
             >
         </PageHeader>
+
+        <div class="flex flex-wrap gap-3">
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par opération"
+                :value="filters.type"
+                @change="
+                    applyFilters({
+                        type: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Opération : toutes</option>
+                <option v-for="t in types" :key="t.value" :value="t.value">
+                    {{ t.label }}
+                </option>
+            </select>
+            <select
+                class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Filtrer par magasin"
+                :value="filters.magasin"
+                @change="
+                    applyFilters({
+                        magasin: ($event.target as HTMLSelectElement).value,
+                    })
+                "
+            >
+                <option value="">Magasin : tous</option>
+                <option
+                    v-for="w in warehouses"
+                    :key="w.id"
+                    :value="String(w.id)"
+                >
+                    {{ w.name }}
+                </option>
+            </select>
+        </div>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher un mouvement…"
+            :data="movements.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun mouvement."
         />
+        <PaginationBar :page="movements" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Nouveau mouvement de stock"
             description="Les pertes et ajustements exigent un motif et une validation (RG9.3)."
             :fields="fields"
             @submit="create"
+        />
+        <ConfirmDialog
+            :open="rejecting !== null"
+            title="Rejeter le mouvement"
+            description="Le stock reste inchangé."
+            confirm-label="Rejeter"
+            require-reason
+            destructive
+            @update:open="(v: boolean) => (v ? null : (rejecting = null))"
+            @confirm="reject"
         />
     </div>
 </template>

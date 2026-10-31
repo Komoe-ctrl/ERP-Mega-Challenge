@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { AlertTriangle, Boxes, Wallet } from '@lucide/vue';
 import { h } from 'vue';
+import { toast } from 'vue-sonner';
+import StockController from '@/actions/App/Http/Controllers/Stocks/StockController';
 import DataTable from '@/components/DataTable.vue';
 import KpiCard from '@/components/erp/KpiCard.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
@@ -9,21 +11,58 @@ import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { amountCell } from '@/lib/cells';
 import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
 import { fcfa, fcfaShort, number } from '@/lib/format';
-import { stockItems } from '@/mocks/v2';
-import type { StockItem } from '@/types/erp';
+
+type Item = {
+    id: number;
+    articleId: number;
+    reference: string;
+    label: string;
+    family: string;
+    unit: string;
+    warehouse: string;
+    warehouseId: number;
+    quantity: number;
+    minimum: number;
+    averageCost: number;
+    value: number;
+    low: boolean;
+};
+
+const props = defineProps<{
+    items: Item[];
+    warehouses: { id: number; name: string; type: string }[];
+    filters: { magasin: string };
+    totals: { value: number; low: number; items: number };
+    can: { configure: boolean };
+}>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Stocks', href: '/stocks' }] },
 });
 
-const low = stockItems.filter((s) => s.quantity < s.minimum);
-// RG9.5 : valorisation au coût moyen pondéré.
-const valuation = stockItems.reduce(
-    (sum, s) => sum + s.quantity * s.averageCost,
-    0,
-);
+function applyWarehouse(id: string) {
+    router.get(StockController.index.url(), id ? { magasin: id } : {}, {
+        preserveState: true,
+        replace: true,
+    });
+}
 
-const columns: DataTableColumn<StockItem>[] = [
+// RG9.4 : le seuil minimal se règle par article et par magasin.
+function setMinimum(item: Item, event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+
+    router.put(
+        StockController.setMinimum.url(item.id),
+        { minimum: value === '' ? 0 : value },
+        {
+            preserveScroll: true,
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Seuil invalide.'),
+        },
+    );
+}
+
+const columns: DataTableColumn<Item>[] = [
     {
         accessorKey: 'label',
         header: 'Article',
@@ -48,7 +87,18 @@ const columns: DataTableColumn<StockItem>[] = [
     {
         accessorKey: 'minimum',
         header: 'Seuil mini',
-        cell: ({ row }) => amountCell(number(row.original.minimum)),
+        cell: ({ row }) =>
+            props.can.configure
+                ? h('input', {
+                      type: 'number',
+                      min: 0,
+                      step: 'any',
+                      value: row.original.minimum,
+                      class: 'h-8 w-24 rounded-md border bg-background px-2 text-right tabular-nums',
+                      'aria-label': `Seuil minimal : ${row.original.label}`,
+                      onChange: (e: Event) => setMinimum(row.original, e),
+                  })
+                : amountCell(number(row.original.minimum)),
     },
     {
         accessorKey: 'averageCost',
@@ -56,19 +106,17 @@ const columns: DataTableColumn<StockItem>[] = [
         cell: ({ row }) => amountCell(fcfa(row.original.averageCost)),
     },
     {
-        id: 'value',
+        accessorKey: 'value',
         header: 'Valeur',
-        accessorFn: (s) => s.quantity * s.averageCost,
-        cell: ({ row }) =>
-            amountCell(fcfa(row.original.quantity * row.original.averageCost)),
+        cell: ({ row }) => amountCell(fcfa(row.original.value)),
     },
     {
         id: 'alert',
         header: 'État',
-        accessorFn: (s) => (s.quantity < s.minimum ? 'bas' : 'ok'),
+        accessorFn: (s) => (s.low ? 'bas' : 'ok'),
         filterFn: 'equalsString',
         cell: ({ row }) =>
-            row.original.quantity < row.original.minimum
+            row.original.low
                 ? h(StatusBadge, {
                       label: 'À réapprovisionner',
                       tone: 'danger',
@@ -77,19 +125,11 @@ const columns: DataTableColumn<StockItem>[] = [
     },
 ];
 
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'warehouse',
-        label: 'Magasin',
-        options: [...new Set(stockItems.map((s) => s.warehouse))].map((w) => ({
-            value: w,
-            label: w,
-        })),
-    },
+const tableFilters: DataTableFilter[] = [
     {
         columnId: 'family',
         label: 'Famille',
-        options: [...new Set(stockItems.map((s) => s.family))].map((f) => ({
+        options: [...new Set(props.items.map((s) => s.family))].map((f) => ({
             value: f,
             label: f,
         })),
@@ -117,35 +157,41 @@ const filters: DataTableFilter[] = [
         <div class="grid gap-3 sm:grid-cols-3">
             <KpiCard
                 label="Valeur du stock"
-                :value="fcfaShort(valuation)"
+                :value="fcfaShort(totals.value)"
                 hint="Coût moyen pondéré"
                 :icon="Wallet"
                 tone="info"
             />
             <KpiCard
                 label="Références en stock"
-                :value="String(stockItems.length)"
+                :value="String(totals.items)"
                 :icon="Boxes"
                 tone="success"
             />
             <KpiCard
                 label="Sous le seuil minimal"
-                :value="String(low.length)"
-                :hint="
-                    low
-                        .map((l) => l.label)
-                        .slice(0, 2)
-                        .join(', ')
-                "
+                :value="String(totals.low)"
                 :icon="AlertTriangle"
-                :tone="low.length ? 'danger' : 'success'"
+                :tone="totals.low ? 'danger' : 'success'"
             />
         </div>
 
+        <select
+            class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            aria-label="Filtrer par magasin"
+            :value="filters.magasin"
+            @change="applyWarehouse(($event.target as HTMLSelectElement).value)"
+        >
+            <option value="">Magasin : tous</option>
+            <option v-for="w in warehouses" :key="w.id" :value="String(w.id)">
+                {{ w.name }}
+            </option>
+        </select>
+
         <DataTable
             :columns="columns"
-            :data="stockItems"
-            :filters="filters"
+            :data="items"
+            :filters="tableFilters"
             search-placeholder="Rechercher un article…"
         />
     </div>

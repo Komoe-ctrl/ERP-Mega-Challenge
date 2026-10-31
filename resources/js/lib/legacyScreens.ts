@@ -6,7 +6,6 @@ import {
     generalLedger,
     importedDatasets,
     initialPieces,
-    legacyInvoices,
     pieceTotal,
     projectTrees,
     receivables,
@@ -98,33 +97,6 @@ export const tableScreens: Record<string, TableScreen> = {
             field: 'status',
             value: 'Approuvée',
             done: 'Engagement approuvé (maquette).',
-        },
-    },
-    'facture-nf': {
-        title: 'Facture (notes de frais)',
-        description: 'Remboursements des notes de frais approuvées.',
-        columns: [
-            { key: 'number', label: 'N° facture' },
-            { key: 'party', label: 'Bénéficiaire' },
-            { key: 'date', label: 'Date', type: 'date' },
-            { key: 'amount', label: 'Montant', type: 'money' },
-            { key: 'status', label: 'État', type: 'badge' },
-        ],
-        rows: legacyInvoices
-            .filter((i) => i.kind === 'note_frais')
-            .map((i) => ({
-                number: i.number,
-                party: i.party,
-                date: i.date,
-                amount: i.amount,
-                status: i.status === 'payee' ? 'Payée' : 'À payer',
-            })),
-        totals: ['amount'],
-        rowAction: {
-            label: 'Marquer comme payée',
-            field: 'status',
-            value: 'Payée',
-            done: 'Note de frais remboursée (maquette).',
         },
     },
     recouvrement: {

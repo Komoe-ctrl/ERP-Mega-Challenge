@@ -8,7 +8,6 @@ import PageHeader from '@/components/erp/PageHeader.vue';
 import { tableScreens } from '@/lib/legacyScreens';
 import type { PieceKind, PieceStatus } from '@/types/legacy';
 import Budget from './screens/Budget.vue';
-import SuiviWorkflow from './screens/SuiviWorkflow.vue';
 import Tableaux from './screens/Tableaux.vue';
 
 /**
@@ -20,12 +19,6 @@ const props = defineProps<{ slug: string }>();
 type Piece = { kind: PieceKind; title: string; onlyStatus?: PieceStatus[] };
 
 const pieceScreens: Record<string, Piece> = {
-    'note-de-frais': { kind: 'nf', title: 'Note de frais' },
-    'validation-nf': {
-        kind: 'nf',
-        title: 'Validation des notes de frais',
-        onlyStatus: ['saisie', 'validee'],
-    },
     recette: { kind: 'recette', title: 'Client facture / recette' },
     'validation-recette': {
         kind: 'recette',
@@ -33,11 +26,6 @@ const pieceScreens: Record<string, Piece> = {
         onlyStatus: ['saisie', 'validee'],
     },
     'entree-de-caisse': { kind: 'caisse', title: 'Entrée de caisse' },
-};
-
-const workflowScreens: Record<string, PieceKind> = {
-    'suivi-workflow-da': 'da',
-    'suivi-workflow-nf': 'nf',
 };
 
 const special: Record<
@@ -66,7 +54,6 @@ const special: Record<
 };
 
 const piece = computed(() => pieceScreens[props.slug]);
-const workflowKind = computed(() => workflowScreens[props.slug]);
 const screen = computed(() => tableScreens[props.slug]);
 const other = computed(() => special[props.slug]);
 const pageTitle = computed(
@@ -84,7 +71,6 @@ const pageTitle = computed(
         :title="piece.title"
         :only-status="piece.onlyStatus"
     />
-    <SuiviWorkflow v-else-if="workflowKind" :key="slug" :kind="workflowKind" />
     <component
         :is="other.component"
         v-else-if="other"

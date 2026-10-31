@@ -103,7 +103,11 @@ export const sidebarMenu: MenuGroup[] = [
                 href: '/achats/a-valider',
                 permission: 'achats.validate',
             },
-            e('Suivi workflow', 'suivi-workflow-da', 'achats.view'),
+            {
+                label: 'Suivi workflow',
+                href: '/achats/demandes/suivi',
+                permission: 'achats.view',
+            },
             {
                 label: 'Fournisseurs',
                 href: '/fournisseurs',
@@ -121,10 +125,26 @@ export const sidebarMenu: MenuGroup[] = [
         icon: Receipt,
         label: 'Notes de frais',
         items: [
-            e('Note de frais', 'note-de-frais', 'achats.view'),
-            e('Validation', 'validation-nf', 'achats.validate'),
-            e('Facture', 'facture-nf', 'achats.view'),
-            e('Suivi workflow', 'suivi-workflow-nf', 'achats.view'),
+            {
+                label: 'Note de frais',
+                href: '/pieces/note_frais',
+                permission: 'achats.view',
+            },
+            {
+                label: 'Validation',
+                href: '/pieces/note_frais/validation',
+                permission: 'achats.validate',
+            },
+            {
+                label: 'Facture',
+                href: '/pieces/note_frais/remboursements',
+                permission: 'finance.view',
+            },
+            {
+                label: 'Suivi workflow',
+                href: '/pieces/note_frais/suivi',
+                permission: 'achats.view',
+            },
         ],
     },
     {

@@ -36,10 +36,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 */
 
 // --- V3 : Clients (M2), Devis (M5), Marchés (M6), Situations (M11) ---------
-Route::middleware(['auth', 'verified', 'can:situations.view'])->prefix('situations')->name('situations.')->group(function () {
-    Route::inertia('/', 'Situations/Index')->name('index');
-    Route::get('{id}', fn (int $id) => Inertia::render('Situations/Show', ['id' => $id]))->whereNumber('id')->name('show');
-});
 
 // --- V4 : Main-d'œuvre (M12), RH (M13), Engins (M14), Finance (M15) --------
 Route::middleware(['auth', 'verified', 'can:main_oeuvre.view'])->prefix('main-oeuvre')->name('main_oeuvre.')->group(function () {
@@ -97,3 +93,4 @@ require __DIR__.'/stocks.php';
 require __DIR__.'/clients.php';
 require __DIR__.'/devis.php';
 require __DIR__.'/marches.php';
+require __DIR__.'/situations.php';

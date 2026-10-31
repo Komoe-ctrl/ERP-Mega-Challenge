@@ -7,41 +7,10 @@ use App\Domain\Administration\Models\Activity;
 use App\Domain\Clients\Models\Client;
 use App\Domain\Devis\Models\Ouvrage;
 use App\Domain\Devis\Models\Quote;
-use App\Domain\Projets\Models\Project;
 use App\Domain\Shared\Enums\RoleName;
-use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 // M5 — Devis : RG5.1, RG5.2, RG5.3, CA5.
-
-function quoteUser(RoleName $role): User
-{
-    return userWithRole($role, ['two_factor_secret' => encrypt('s'), 'two_factor_recovery_codes' => encrypt(json_encode(['c'])), 'two_factor_confirmed_at' => now()]);
-}
-
-function quoteProject(string $status = 'etude'): Project
-{
-    return Project::factory()->withStatus($status)->create();
-}
-
-function draftQuote(User $author, ?Project $project = null): Quote
-{
-    $project ??= quoteProject();
-
-    test()->actingAs($author)->post(route('devis.store'), [
-        'client_id' => $project->client_id, 'project_id' => $project->id, 'vat_rate' => 18, 'discount_rate' => 0,
-    ])->assertSessionHasNoErrors();
-
-    return Quote::query()->latest('id')->firstOrFail();
-}
-
-function saveLines(Quote $quote, User $by, ?array $works = null, array $overrides = []): void
-{
-    test()->actingAs($by)->put(route('devis.update', $quote), $overrides + [
-        'discount_rate' => 0, 'vat_rate' => 18, 'direct_cost' => 600_000,
-        'works' => $works ?? [['label' => 'Maçonnerie de parpaings', 'unit' => 'm²', 'quantity' => 100, 'unit_price' => 10_000]],
-    ])->assertSessionHasNoErrors();
-}
 
 it('crée un devis en brouillon avec un numéro unique', function () {
     $dt = quoteUser(RoleName::DirectionTechnique);

@@ -6,47 +6,9 @@ use App\Domain\Devis\Models\Quote;
 use App\Domain\Marches\Models\Contract;
 use App\Domain\Projets\Models\Project;
 use App\Domain\Shared\Enums\RoleName;
-use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 // M6 — Marchés : RG6.1, RG6.2, RG6.3, CA6.
-
-function contractUser(RoleName $role): User
-{
-    return userWithRole($role, ['two_factor_secret' => encrypt('s'), 'two_factor_recovery_codes' => encrypt(json_encode(['c'])), 'two_factor_confirmed_at' => now()]);
-}
-
-/** Devis validé de 1 000 000 FCFA HT, établi par la Direction technique et validé par la Direction générale. */
-function validatedQuote(User $dt, User $dg, string $projectStatus = 'etude'): Quote
-{
-    $project = Project::factory()->withStatus($projectStatus)->create();
-    test()->actingAs($dt)->post(route('devis.store'), ['client_id' => $project->client_id, 'project_id' => $project->id, 'vat_rate' => 18])->assertSessionHasNoErrors();
-    $quote = Quote::query()->latest('id')->firstOrFail();
-    test()->actingAs($dt)->put(route('devis.update', $quote), [
-        'discount_rate' => 0, 'vat_rate' => 18, 'direct_cost' => 800_000,
-        'works' => [['label' => 'Gros œuvre complet', 'unit' => 'ens', 'quantity' => 1, 'unit_price' => 1_000_000]],
-    ])->assertSessionHasNoErrors();
-    test()->actingAs($dt)->post(route('devis.submit', $quote))->assertSessionHasNoErrors();
-    test()->actingAs($dg)->post(route('devis.validate', $quote))->assertSessionHasNoErrors();
-
-    return $quote->refresh();
-}
-
-function contractPayload(Quote $quote, array $overrides = []): array
-{
-    return $overrides + [
-        'quote_id' => $quote->id, 'signed_at' => now()->toDateString(), 'deadline_days' => 180,
-        'advance_rate' => 10, 'retention_rate' => 5, 'payment_days' => 30,
-    ];
-}
-
-function newContract(User $dt, User $dg): Contract
-{
-    $quote = validatedQuote($dt, $dg);
-    test()->actingAs($dt)->post(route('marches.store'), contractPayload($quote))->assertSessionHasNoErrors();
-
-    return Contract::query()->latest('id')->firstOrFail();
-}
 
 it('RG6.1 : un marché naît d\'un devis validé et reprend son montant HT', function () {
     $dt = contractUser(RoleName::DirectionTechnique);

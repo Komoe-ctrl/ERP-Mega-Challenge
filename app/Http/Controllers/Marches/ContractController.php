@@ -10,6 +10,7 @@ use App\Domain\Marches\Actions\ManageAmendment;
 use App\Domain\Marches\Models\Contract;
 use App\Domain\Marches\Models\ContractAmendment;
 use App\Domain\Shared\Support\Present;
+use App\Domain\Situations\Models\Situation;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,8 +101,14 @@ final class ContractController extends Controller
                     'canValidate' => ! $a->is_validated && $a->created_by !== $user?->id && ($user?->can('validate', $contract) ?? false),
                 ])->values(),
             ],
-            // Les situations de travaux seront reliées avec le module M11.
-            'situations' => [],
+            'situations' => Situation::query()->where('contract_id', $contract->id)->orderBy('number')->get()
+                ->map(fn (Situation $s): array => [
+                    'id' => $s->id,
+                    'number' => $s->number,
+                    'date' => $s->situation_date->toDateString(),
+                    'status' => $s->status,
+                    'netTtc' => $s->computation()['netTtc'],
+                ])->values(),
             'can' => ['amend' => $user?->can('update', $contract) ?? false],
         ]);
     }

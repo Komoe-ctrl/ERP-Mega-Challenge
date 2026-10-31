@@ -3,7 +3,7 @@
 Situations de travaux calculées automatiquement : cumul, retenue de garantie, acompte, net à payer.
 
 - **Version de livraison** : V3
-- **État** : À faire (V3)
+- **État** : Branché au serveur (V3)
 - **Spécification** : RG11.1 à RG11.4, CA11 (cahier des charges, `docs/cahier-des-charges.pdf`)
 - **Permissions** : `situations.view`, `.create`, `.update`, `.validate`, `.delete`
 

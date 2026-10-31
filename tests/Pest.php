@@ -10,12 +10,15 @@ use App\Domain\Administration\Models\FiscalYear;
 use App\Domain\Budget\Models\BudgetCommitment;
 use App\Domain\Budget\Models\BudgetLine;
 use App\Domain\Chantiers\Models\Chantier;
+use App\Domain\Devis\Models\Quote;
 use App\Domain\Fournisseurs\Models\Supplier;
 use App\Domain\Fournisseurs\Models\SupplierTariff;
+use App\Domain\Marches\Models\Contract;
 use App\Domain\Pieces\Models\Piece;
 use App\Domain\Pieces\Models\Rubrique;
 use App\Domain\Pieces\Models\RubriqueBudget;
 use App\Domain\Pieces\Models\ValidationStep;
+use App\Domain\Projets\Models\Project;
 use App\Domain\Shared\Enums\RoleName;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -150,4 +153,72 @@ function receive(PurchaseOrder $order, float $delivered, float $returned = 0, ?U
     return test()->actingAs($by ?? receiver())->post(route('achats.receptions.store', $order), [
         'lines' => [['purchase_order_line_id' => $order->lines()->firstOrFail()->id, 'delivered' => $delivered, 'returned' => $returned]],
     ]);
+}
+
+// --- Devis, marchés et situations (V3) ---
+
+function quoteUser(RoleName $role): User
+{
+    return userWithRole($role, ['two_factor_secret' => encrypt('s'), 'two_factor_recovery_codes' => encrypt(json_encode(['c'])), 'two_factor_confirmed_at' => now()]);
+}
+
+function quoteProject(string $status = 'etude'): Project
+{
+    return Project::factory()->withStatus($status)->create();
+}
+
+function draftQuote(User $author, ?Project $project = null): Quote
+{
+    $project ??= quoteProject();
+
+    test()->actingAs($author)->post(route('devis.store'), [
+        'client_id' => $project->client_id, 'project_id' => $project->id, 'vat_rate' => 18, 'discount_rate' => 0,
+    ])->assertSessionHasNoErrors();
+
+    return Quote::query()->latest('id')->firstOrFail();
+}
+
+function saveLines(Quote $quote, User $by, ?array $works = null, array $overrides = []): void
+{
+    test()->actingAs($by)->put(route('devis.update', $quote), $overrides + [
+        'discount_rate' => 0, 'vat_rate' => 18, 'direct_cost' => 600_000,
+        'works' => $works ?? [['label' => 'Maçonnerie de parpaings', 'unit' => 'm²', 'quantity' => 100, 'unit_price' => 10_000]],
+    ])->assertSessionHasNoErrors();
+}
+
+function contractUser(RoleName $role): User
+{
+    return userWithRole($role, ['two_factor_secret' => encrypt('s'), 'two_factor_recovery_codes' => encrypt(json_encode(['c'])), 'two_factor_confirmed_at' => now()]);
+}
+
+/** Devis validé de 1 000 000 FCFA HT, établi par la Direction technique et validé par la Direction générale. */
+function validatedQuote(User $dt, User $dg, string $projectStatus = 'etude'): Quote
+{
+    $project = Project::factory()->withStatus($projectStatus)->create();
+    test()->actingAs($dt)->post(route('devis.store'), ['client_id' => $project->client_id, 'project_id' => $project->id, 'vat_rate' => 18])->assertSessionHasNoErrors();
+    $quote = Quote::query()->latest('id')->firstOrFail();
+    test()->actingAs($dt)->put(route('devis.update', $quote), [
+        'discount_rate' => 0, 'vat_rate' => 18, 'direct_cost' => 800_000,
+        'works' => [['label' => 'Gros œuvre complet', 'unit' => 'ens', 'quantity' => 1, 'unit_price' => 1_000_000]],
+    ])->assertSessionHasNoErrors();
+    test()->actingAs($dt)->post(route('devis.submit', $quote))->assertSessionHasNoErrors();
+    test()->actingAs($dg)->post(route('devis.validate', $quote))->assertSessionHasNoErrors();
+
+    return $quote->refresh();
+}
+
+function contractPayload(Quote $quote, array $overrides = []): array
+{
+    return $overrides + [
+        'quote_id' => $quote->id, 'signed_at' => now()->toDateString(), 'deadline_days' => 180,
+        'advance_rate' => 10, 'retention_rate' => 5, 'payment_days' => 30,
+    ];
+}
+
+function newContract(User $dt, User $dg): Contract
+{
+    $quote = validatedQuote($dt, $dg);
+    test()->actingAs($dt)->post(route('marches.store'), contractPayload($quote))->assertSessionHasNoErrors();
+
+    return Contract::query()->latest('id')->firstOrFail();
 }

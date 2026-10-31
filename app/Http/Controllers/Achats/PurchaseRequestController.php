@@ -69,6 +69,55 @@ final class PurchaseRequestController extends Controller
         ]);
     }
 
+    /**
+     * Suivi « workflow » des demandes d'achat : l'historique de chaque demande (qui, quand, quelle
+     * décision, quel motif), au même format que celui des pièces communes.
+     */
+    public function workflow(Request $request): Response
+    {
+        $this->authorize('viewAny', PurchaseRequest::class);
+
+        $requests = $this->visibleTo($this->user($request))
+            ->with(['events.user'])
+            ->orderByDesc('number')
+            ->limit(100)
+            ->get();
+
+        $statuses = [
+            'brouillon' => ['saisie', 'Brouillon'],
+            'en_attente' => ['en_validation', 'En attente de validation'],
+            'validee' => ['approuvee', 'Validée'],
+            'refusee' => ['rejetee', 'Refusée'],
+            'renvoyee' => ['rejetee', 'Renvoyée pour correction'],
+            'annulee' => ['rejetee', 'Annulée'],
+        ];
+
+        return Inertia::render('Pieces/Suivi', [
+            'kind' => ['value' => 'da', 'label' => 'Demande d\'achat'],
+            'steps' => [],
+            'pieces' => $requests->map(function (PurchaseRequest $r) use ($statuses): array {
+                $status = $r->status->getValue();
+
+                return [
+                    'id' => $r->id,
+                    'number' => $r->number,
+                    'title' => $r->justification ?? '',
+                    'status' => $statuses[$status][0] ?? 'saisie',
+                    'status_label' => $statuses[$status][1] ?? $status,
+                    'current_step' => null,
+                    'total' => $r->total_amount,
+                    'events' => $r->events->map(fn ($e): array => [
+                        'at' => $e->created_at?->format('Y-m-d H:i') ?? '',
+                        'by' => $e->user instanceof User ? $e->user->name : 'Système',
+                        'action' => $e->action,
+                        'step' => null,
+                        'comment' => $e->reason,
+                    ])->values()->all(),
+                ];
+            })->values()->all(),
+        ]);
+    }
+
     public function pending(Request $request, RequestRouting $routing): Response
     {
         abort_unless($this->user($request)->can('achats.validate'), 403);

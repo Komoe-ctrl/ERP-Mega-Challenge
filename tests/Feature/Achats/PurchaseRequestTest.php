@@ -563,3 +563,38 @@ it('crée des projets, chantiers et demandes cohérents avec la fabrique', funct
     expect($request->computeTotal())->toBe(13_000)
         ->and($request->chantier->project)->toBeInstanceOf(Project::class);
 });
+
+// ------------------------------------------------------------------ suivi « workflow »
+
+it('expose le suivi workflow des demandes : qui, quand, quelle décision, quel motif', function () {
+    [$chantier, $conducteur, $chef] = budgetedSite();
+    $request = pendingRequest($chantier, $chef);
+    $this->actingAs($conducteur)->post(route('achats.demandes.refuse', $request), ['reason' => 'Quantité excessive.']);
+
+    $this->actingAs($chef)->get(route('achats.demandes.workflow'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Pieces/Suivi', false)
+            ->where('kind.value', 'da')
+            ->has('pieces', 1)
+            ->where('pieces.0.number', $request->number)
+            ->where('pieces.0.status', 'rejetee')
+            ->where('pieces.0.status_label', 'Refusée')
+            ->where('pieces.0.events.0.action', 'Création (brouillon)')
+            ->where('pieces.0.events.1.action', 'Soumise pour validation')
+            ->where('pieces.0.events.2.by', $conducteur->name)
+            ->where('pieces.0.events.2.comment', 'Quantité excessive.'));
+});
+
+it('le suivi workflow des demandes ne montre que les demandes des chantiers visibles', function () {
+    [$chantier, , $chef] = budgetedSite();
+    pendingRequest($chantier, $chef);
+    [, , $otherChef] = budgetedSite();
+
+    $this->actingAs($otherChef)->get(route('achats.demandes.workflow'))
+        ->assertInertia(fn (Assert $page) => $page->has('pieces', 0));
+});
+
+it('refuse le suivi workflow des demandes à un profil sans droit sur les achats (403)', function () {
+    $this->actingAs(actor(RoleName::RessourcesHumaines))->get(route('achats.demandes.workflow'))->assertForbidden();
+});

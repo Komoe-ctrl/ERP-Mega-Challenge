@@ -10,6 +10,7 @@ use App\Domain\Pieces\Enums\PieceStatus;
 use App\Domain\Pieces\Policies\PiecePolicy;
 use App\Domain\Projets\Models\Project;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Model;
@@ -41,8 +42,11 @@ use Spatie\MediaLibrary\InteractsWithMedia;
  * @property PieceStatus $status
  * @property int|null $current_step
  * @property int $total
+ * @property string|null $invoice_number
+ * @property CarbonInterface|null $reimbursed_at
+ * @property int|null $reimbursed_by
  */
-#[Fillable(['kind', 'number', 'period', 'fiscal_year_id', 'title', 'requester_id', 'project_id', 'project_lot_id', 'lot_component_id', 'bc_number', 'observation', 'status', 'current_step', 'total'])]
+#[Fillable(['kind', 'number', 'period', 'fiscal_year_id', 'title', 'requester_id', 'project_id', 'project_lot_id', 'lot_component_id', 'bc_number', 'observation', 'status', 'current_step', 'total', 'invoice_number', 'reimbursed_at', 'reimbursed_by'])]
 #[UsePolicy(PiecePolicy::class)]
 class Piece extends Model implements HasMedia
 {
@@ -55,6 +59,7 @@ class Piece extends Model implements HasMedia
             'status' => PieceStatus::class,
             'current_step' => 'integer',
             'total' => 'integer',
+            'reimbursed_at' => 'datetime',
         ];
     }
 

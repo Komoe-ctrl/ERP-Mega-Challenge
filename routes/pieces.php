@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Route;
 // Les droits viennent de la PiecePolicy (module du type de pièce + rôle de l'étape du circuit).
 Route::middleware(['auth', 'verified'])->prefix('pieces/{kind}')->name('pieces.')->group(function () {
     Route::get('/', [PieceController::class, 'index'])->name('index');
+    Route::get('validation', [PieceController::class, 'validation'])->name('validation');
+    Route::get('suivi', [PieceController::class, 'suivi'])->name('suivi');
+    Route::get('remboursements', [PieceController::class, 'remboursements'])->name('remboursements');
     Route::get('budget', [PieceController::class, 'budget'])->name('budget');
     Route::post('/', [PieceController::class, 'store'])->name('store');
     Route::get('{piece}', [PieceController::class, 'show'])->whereNumber('piece')->name('show');
@@ -15,4 +18,5 @@ Route::middleware(['auth', 'verified'])->prefix('pieces/{kind}')->name('pieces.'
     Route::post('{piece}/soumettre', [PieceController::class, 'submit'])->whereNumber('piece')->name('submit');
     Route::post('{piece}/valider', [PieceController::class, 'advance'])->whereNumber('piece')->name('advance');
     Route::post('{piece}/rejeter', [PieceController::class, 'reject'])->whereNumber('piece')->name('reject');
+    Route::post('{piece}/rembourser', [PieceController::class, 'reimburse'])->whereNumber('piece')->name('reimburse');
 });

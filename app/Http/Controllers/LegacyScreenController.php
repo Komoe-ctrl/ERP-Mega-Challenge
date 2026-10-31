@@ -19,13 +19,7 @@ final class LegacyScreenController extends Controller
 {
     /** Permission requise par écran. */
     private const PERMISSIONS = [
-        // Notes de frais (module Achats)
-        'note-de-frais' => 'achats.view',
-        'validation-nf' => 'achats.validate',
-        'facture-nf' => 'achats.view',
-        'suivi-workflow-nf' => 'achats.view',
         // Demandes d'achats
-        'suivi-workflow-da' => 'achats.view',
         'approbation-pieces-engagees' => 'achats.validate',
         // Projets et chantiers
         'planning' => 'chantiers.view',

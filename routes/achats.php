@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'verified', 'can:achats.view'])->prefix('achats')->name('achats.')->group(function () {
     // M8.1 — Demandes d'achat : saisie, validation motivée, annulation.
     Route::get('demandes', [PurchaseRequestController::class, 'index'])->name('demandes');
+    Route::get('demandes/suivi', [PurchaseRequestController::class, 'workflow'])->name('demandes.workflow');
     Route::get('demandes/creer', [PurchaseRequestController::class, 'create'])->name('demandes.create');
     Route::post('demandes', [PurchaseRequestController::class, 'store'])->name('demandes.store');
     Route::get('demandes/{purchaseRequest}', [PurchaseRequestController::class, 'show'])->whereNumber('purchaseRequest')->name('demandes.show');

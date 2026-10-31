@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Pieces\Policies;
 
 use App\Domain\Pieces\Enums\PieceKind;
+use App\Domain\Pieces\Enums\PieceStatus;
 use App\Domain\Pieces\Models\Piece;
 use App\Domain\Pieces\Support\ValidationCircuit;
+use App\Domain\Shared\Enums\Module;
 use App\Domain\Shared\Enums\PermissionAction;
 use App\Models\User;
 
@@ -54,6 +56,22 @@ final class PiecePolicy
     public function submit(User $user, Piece $piece): bool
     {
         return $this->update($user, $piece);
+    }
+
+    /** Rembourser une note de frais approuvée : droit d'écriture sur la Finance (Comptabilité, Finance). */
+    public function reimburse(User $user, Piece $piece): bool
+    {
+        return $piece->kind === PieceKind::NoteFrais
+            && $piece->status === PieceStatus::Approuvee
+            && $piece->invoice_number === null
+            && $user->is_active
+            && $user->can(Module::Finance->permission(PermissionAction::Update));
+    }
+
+    /** Le compte voit-il les remboursements ? (Comptabilité, Finance, Direction) */
+    public function viewReimbursements(User $user): bool
+    {
+        return $user->is_active && $user->can(Module::Finance->permission(PermissionAction::View));
     }
 
     /** Valider ou rejeter à l'étape courante : rôle de l'étape, jamais l'auteur. */

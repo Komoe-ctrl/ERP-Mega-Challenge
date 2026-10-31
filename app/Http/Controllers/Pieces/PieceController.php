@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Pieces;
 
 use App\Domain\Administration\Models\FiscalYear;
 use App\Domain\Pieces\Actions\AdvancePiece;
+use App\Domain\Pieces\Actions\ReimbursePiece;
 use App\Domain\Pieces\Actions\RejectPiece;
 use App\Domain\Pieces\Actions\SavePiece;
 use App\Domain\Pieces\Actions\SubmitPiece;
@@ -16,10 +17,12 @@ use App\Domain\Pieces\Models\Rubrique;
 use App\Domain\Pieces\Support\BudgetPanel;
 use App\Domain\Pieces\Support\ValidationCircuit;
 use App\Domain\Projets\Models\Project;
+use App\Domain\Shared\Enums\PermissionAction;
 use App\Domain\Shared\Support\Present;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pieces\SavePieceRequest;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,36 +35,126 @@ use Inertia\Response;
  */
 final class PieceController extends Controller
 {
+    /** Saisie : liste des pièces du type et formulaire de saisie. */
     public function index(Request $request, PieceKind $kind, ValidationCircuit $circuit): Response
+    {
+        return $this->listing($request, $kind, 'saisie', $circuit);
+    }
+
+    /** Validation : pièces qui attendent l'étape du compte connecté. */
+    public function validation(Request $request, PieceKind $kind, ValidationCircuit $circuit): Response
+    {
+        return $this->listing($request, $kind, 'validation', $circuit);
+    }
+
+    /** Facture : notes de frais approuvées à rembourser ou déjà remboursées. */
+    public function remboursements(Request $request, PieceKind $kind, ValidationCircuit $circuit): Response
+    {
+        $this->authorize('viewReimbursements', Piece::class);
+        abort_unless($kind === PieceKind::NoteFrais, 404);
+
+        return $this->listing($request, $kind, 'remboursements', $circuit);
+    }
+
+    /** Suivi « workflow » : qui a fait quoi, quand, avec quel commentaire, pour chaque pièce. */
+    public function suivi(Request $request, PieceKind $kind, ValidationCircuit $circuit): Response
+    {
+        $this->authorize('viewAny', [Piece::class, $kind]);
+
+        $pieces = $this->visible($this->user($request), $kind)
+            ->with(['requester', 'events.user'])
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        return Inertia::render('Pieces/Suivi', [
+            'kind' => ['value' => $kind->value, 'label' => $kind->label()],
+            'steps' => $circuit->activeSteps()->map(fn ($s): array => ['position' => $s->position, 'label' => $s->label])->values(),
+            'pieces' => $pieces->map(fn (Piece $p): array => [
+                'id' => $p->id,
+                'number' => $p->number,
+                'title' => $p->title,
+                'status' => $p->status->value,
+                'status_label' => $p->status->label(),
+                'current_step' => $p->current_step,
+                'total' => $p->total,
+                'events' => $p->events->map(fn ($e): array => [
+                    'at' => $e->created_at->format('Y-m-d H:i'),
+                    'by' => $e->user instanceof User ? $e->user->name : 'Système',
+                    'action' => $e->action,
+                    'step' => $e->step_label,
+                    'comment' => $e->comment,
+                ])->values(),
+            ])->values(),
+        ]);
+    }
+
+    public function reimburse(Request $request, PieceKind $kind, Piece $piece, ReimbursePiece $action): RedirectResponse
+    {
+        abort_unless($piece->kind === $kind, 404);
+        $this->authorize('reimburse', $piece);
+        $action->execute($piece, $this->user($request));
+
+        $this->toast('Note de frais remboursée.');
+
+        return back();
+    }
+
+    private function listing(Request $request, PieceKind $kind, string $mode, ValidationCircuit $circuit): Response
     {
         $user = $this->user($request);
         $this->authorize('viewAny', [Piece::class, $kind]);
 
-        $pieces = Piece::query()
+        $pieces = $this->visible($user, $kind)
             ->with(['requester', 'lines.rubrique'])
-            ->where('kind', $kind->value)
+            ->when($mode === 'remboursements', fn ($q) => $q->where('status', PieceStatus::Approuvee->value))
+            ->when($mode === 'validation', fn ($q) => $q->where('status', PieceStatus::EnValidation->value))
             ->when($request->string('statut')->toString() !== '', fn ($q) => $q->where('status', $request->string('statut')->toString()))
             ->latest('id')
             ->limit(200)
             ->get();
 
+        if ($mode === 'validation') {
+            $pieces = $pieces->filter(fn (Piece $p): bool => $user->can('decide', $p))->values();
+        }
+
         $steps = $circuit->activeSteps();
 
         return Inertia::render('Pieces/Index', [
+            'mode' => $mode,
             'kind' => ['value' => $kind->value, 'label' => $kind->label()],
             'pieces' => $pieces->map(fn (Piece $p): array => $this->row($p, $user, $circuit))->values(),
             // Ligne d'état du circuit : combien de pièces attendent chaque étape.
             'waiting' => $steps->map(fn ($s): array => [
                 'step' => $s->label,
-                'count' => $pieces->where('status', PieceStatus::EnValidation)->where('current_step', $s->position)->count(),
+                'count' => Piece::query()->where('kind', $kind->value)->where('status', PieceStatus::EnValidation->value)->where('current_step', $s->position)->count(),
             ])->values(),
             'steps' => $steps->map(fn ($s): array => ['position' => $s->position, 'label' => $s->label, 'button' => $s->button_label])->values(),
             'rubriques' => Rubrique::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'label']),
             'projects' => $this->projects(),
             'can' => [
-                'create' => $user->can('create', [Piece::class, $kind]),
+                'create' => $mode === 'saisie' && $user->can('create', [Piece::class, $kind]),
             ],
         ]);
+    }
+
+    /**
+     * Pièces que le compte peut voir : toutes celles du type s'il a la lecture du module ;
+     * sinon (porteur d'un rôle du circuit) les siennes et celles qui sont en validation.
+     *
+     * @return Builder<Piece>
+     */
+    private function visible(User $user, PieceKind $kind): Builder
+    {
+        $query = Piece::query()->where('kind', $kind->value);
+
+        if ($user->can($kind->module()->permission(PermissionAction::View))) {
+            return $query;
+        }
+
+        return $query->where(fn ($q) => $q
+            ->where('requester_id', $user->id)
+            ->orWhere('status', PieceStatus::EnValidation->value));
     }
 
     public function show(Request $request, PieceKind $kind, Piece $piece, ValidationCircuit $circuit): Response
@@ -72,6 +165,9 @@ final class PieceController extends Controller
         $piece->load(['requester', 'lines.rubrique', 'events.user', 'project', 'lot', 'component']);
 
         return Inertia::render('Pieces/Show', [
+            'kind' => ['value' => $kind->value, 'label' => $kind->label()],
+            'rubriques' => Rubrique::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'label']),
+            'projects' => $this->projects(),
             'piece' => [
                 ...$this->row($piece, $this->user($request), $circuit),
                 'project_id' => $piece->project_id,
@@ -210,10 +306,13 @@ final class PieceController extends Controller
             'total' => $p->total,
             'waiting' => $step?->label,
             'proof' => $p->getFirstMedia('justificatifs')?->file_name,
+            'invoice_number' => $p->invoice_number,
+            'reimbursed_at' => $p->reimbursed_at?->format('Y-m-d'),
             'can' => [
                 'update' => $user->can('update', $p),
                 'decide' => $user->can('decide', $p),
                 'button' => $step?->button_label,
+                'reimburse' => $user->can('reimburse', $p),
             ],
         ];
     }

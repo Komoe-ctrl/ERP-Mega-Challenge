@@ -110,6 +110,10 @@ enum RoleName: string
                 Module::Projets->value => $full,
                 Module::Chantiers->value => $full,
                 Module::Devis->value => $full,
+                // La Direction technique gère la relation commerciale : clients, marchés et situations de travaux.
+                Module::Clients->value => $write,
+                Module::Marches->value => $full,
+                Module::Situations->value => $full,
                 Module::Achats->value => [...$read, PermissionAction::Validate],
                 Module::Stocks->value => $read,
                 Module::Budget->value => $read,

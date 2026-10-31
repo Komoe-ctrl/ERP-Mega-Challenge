@@ -1,100 +1,53 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import { toast } from 'vue-sonner';
+import ReceptionController from '@/actions/App/Http/Controllers/Achats/ReceptionController';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
-import { dateFr, number, TODAY } from '@/lib/format';
-import { orders, receptions } from '@/mocks/v2';
+import { dateFr, number } from '@/lib/format';
+import type { Paginated } from '@/types';
 import type { Reception } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+const props = defineProps<{
+    receptions: Paginated<Reception & { evaluated: boolean }>;
+    receivable: { id: number; number: string; supplierName: string }[];
+}>();
 
 defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Achats', href: '/achats/demandes' },
-            { title: 'Réceptions', href: '/achats/receptions' },
+            { title: 'Bons de livraison', href: '/achats/receptions' },
         ],
     },
 });
 
-const { can } = usePermissions();
-const rows = ref<Reception[]>(receptions.map((r) => ({ ...r })));
 const createOpen = ref(false);
 
-const receivable = computed(() =>
-    orders.filter((o) => ['emis', 'partiel'].includes(o.status)),
-);
 const fields = computed<FieldDef[]>(() => [
     {
         name: 'order',
-        label: 'Bon de commande',
+        label: 'Bon de commande à réceptionner',
         type: 'select',
         required: true,
         wide: true,
-        options: receivable.value.map((o) => ({
-            value: o.number,
+        options: props.receivable.map((o) => ({
+            value: String(o.id),
             label: `${o.number} — ${o.supplierName}`,
         })),
+        hint: props.receivable.length
+            ? 'Vous saisirez ensuite les quantités réellement livrées.'
+            : 'Aucun bon de commande en attente de livraison.',
     },
-    {
-        name: 'received',
-        label: 'Quantité totale reçue',
-        type: 'number',
-        required: true,
-        min: 0,
-        step: 1,
-        hint: 'Quantité réellement livrée. Un écart avec la commande génère un reliquat ou un retour (RG8.9).',
-    },
-    {
-        name: 'date',
-        label: 'Date de réception',
-        type: 'date',
-        required: true,
-        validate: (v) =>
-            v && String(v) > TODAY
-                ? 'La réception ne peut pas être dans le futur.'
-                : null,
-    },
-    { name: 'note', label: 'Observations', type: 'textarea' },
 ]);
 
-function create(v: FieldValues) {
-    const order = orders.find((o) => o.number === v.order);
-
-    if (!order) {
-        return;
-    }
-
-    const ordered = order.lines.reduce((s, l) => s + l.ordered, 0);
-    const received = Number(v.received);
-    const gap: Reception['gap'] =
-        received === ordered
-            ? 'conforme'
-            : received < ordered
-              ? 'reliquat'
-              : 'retour';
-
-    rows.value.unshift({
-        id: Date.now(),
-        number: `BR-2026-00${209 + rows.value.length - receptions.length}`,
-        orderNumber: order.number,
-        supplierName: order.supplierName,
-        date: String(v.date),
-        gap,
-        lines: [{ label: 'Total de la commande', ordered, received, unit: '' }],
-    });
-    toast.success(
-        gap === 'conforme'
-            ? 'Réception conforme : entrée en stock (maquette).'
-            : gap === 'reliquat'
-              ? 'Réception partielle : un reliquat reste à livrer (maquette).'
-              : 'Quantité supérieure à la commande : un retour est généré (maquette).',
-    );
+function start(v: FieldValues) {
+    router.visit(ReceptionController.create.url(Number(v.order)));
 }
 </script>
 
@@ -106,16 +59,14 @@ function create(v: FieldValues) {
             title="Bons de livraison (réceptions)"
             description="Quantités réellement livrées ; un écart avec la commande génère un reliquat ou un retour (RG8.9)."
         >
-            <Button
-                v-if="can('stocks.create') || can('achats.create')"
-                @click="createOpen = true"
+            <Button v-if="receivable.length" @click="createOpen = true"
                 ><Plus /> Enregistrer une réception</Button
             >
         </PageHeader>
 
         <div class="grid gap-3 lg:grid-cols-2">
             <article
-                v-for="r in rows"
+                v-for="r in receptions.data"
                 :key="r.id"
                 class="space-y-3 rounded-xl border bg-card p-4 shadow-xs"
             >
@@ -123,9 +74,16 @@ function create(v: FieldValues) {
                     <div>
                         <p class="font-display font-semibold">{{ r.number }}</p>
                         <p class="text-sm text-muted-foreground">
-                            {{ r.supplierName }} ·
                             <Link
-                                :href="`/achats/commandes/${orders.find((o) => o.number === r.orderNumber)?.id ?? ''}`"
+                                v-if="r.supplierId"
+                                :href="`/fournisseurs/${r.supplierId}`"
+                                class="hover:underline"
+                                >{{ r.supplierName }}</Link
+                            >
+                            <template v-else>{{ r.supplierName }}</template>
+                            ·
+                            <Link
+                                :href="`/achats/commandes/${r.orderId}`"
                                 class="hover:underline"
                                 >{{ r.orderNumber }}</Link
                             >
@@ -167,14 +125,25 @@ function create(v: FieldValues) {
                         </tr>
                     </tbody>
                 </table>
+                <p v-if="r.note" class="text-sm text-muted-foreground">
+                    {{ r.note }}
+                </p>
             </article>
+            <p
+                v-if="!receptions.data.length"
+                class="col-span-full rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground"
+            >
+                Aucune réception enregistrée.
+            </p>
         </div>
+        <PaginationBar :page="receptions" />
 
         <FormDialog
             v-model:open="createOpen"
             title="Enregistrer une réception"
             :fields="fields"
-            @submit="create"
+            submit-label="Continuer"
+            @submit="start"
         />
     </div>
 </template>

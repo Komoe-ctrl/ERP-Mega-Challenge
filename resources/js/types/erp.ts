@@ -291,6 +291,7 @@ export type PurchaseOrderStatus =
 export type PurchaseOrder = {
     id: Id;
     number: string;
+    supplierId?: Id;
     supplierName: string;
     chantierName: string;
     requestNumbers: string[];
@@ -298,6 +299,7 @@ export type PurchaseOrder = {
     amount: number;
     status: PurchaseOrderStatus;
     lines: {
+        id?: Id;
         label: string;
         unit: string;
         ordered: number;
@@ -314,6 +316,9 @@ export type Reception = {
     date: string;
     lines: { label: string; ordered: number; received: number; unit: string }[];
     gap: 'conforme' | 'reliquat' | 'retour';
+    orderId?: Id;
+    supplierId?: Id | null;
+    note?: string | null;
 };
 
 export type SupplierInvoice = {

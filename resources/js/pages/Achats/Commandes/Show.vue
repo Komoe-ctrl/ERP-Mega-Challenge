@@ -7,10 +7,20 @@ import ProgressBar from '@/components/erp/ProgressBar.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa, number } from '@/lib/format';
-import { requests } from '@/mocks/achats';
-import { invoices, orders, receptions } from '@/mocks/v2';
+import type { PurchaseOrder, Reception } from '@/types/erp';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    order: PurchaseOrder;
+    canReceive: boolean;
+    receptions: Reception[];
+    invoices: {
+        id: number;
+        number: string;
+        dueDate: string;
+        amount: number;
+        status: string;
+    }[];
+}>();
 
 defineOptions({
     layout: {
@@ -25,24 +35,17 @@ function print() {
     window.print();
 }
 
-const order = computed(
-    () => orders.find((o) => o.id === props.id) ?? orders[0],
-);
 const orderedTotal = computed(() =>
-    order.value.lines.reduce((s, l) => s + l.ordered, 0),
+    props.order.lines.reduce((s, l) => s + l.ordered, 0),
 );
 const receivedTotal = computed(() =>
-    order.value.lines.reduce((s, l) => s + l.received, 0),
+    props.order.lines.reduce((s, l) => s + l.received, 0),
 );
 const received = computed(() =>
     orderedTotal.value ? (receivedTotal.value / orderedTotal.value) * 100 : 0,
 );
-const orderReceptions = computed(() =>
-    receptions.filter((r) => r.orderNumber === order.value.number),
-);
-const orderInvoices = computed(() =>
-    invoices.filter((i) => i.orderNumber === order.value.number),
-);
+const orderReceptions = computed(() => props.receptions);
+const orderInvoices = computed(() => props.invoices);
 </script>
 
 <template>
@@ -54,10 +57,24 @@ const orderInvoices = computed(() =>
             :description="`${order.supplierName} · ${order.chantierName} · ${dateFr(order.date)}`"
         >
             <StatusBadge kind="order" :status="order.status" />
+            <Button v-if="canReceive" as-child>
+                <Link :href="`/achats/commandes/${order.id}/reception`"
+                    >Réceptionner</Link
+                >
+            </Button>
             <Button variant="outline" @click="print"
                 ><Printer /> Imprimer</Button
             >
         </PageHeader>
+
+        <p v-if="order.supplierId" class="text-sm">
+            Fournisseur :
+            <Link
+                :href="`/fournisseurs/${order.supplierId}`"
+                class="font-medium hover:underline"
+                >{{ order.supplierName }}</Link
+            >
+        </p>
 
         <section class="overflow-hidden rounded-xl border bg-card shadow-xs">
             <div class="overflow-x-auto">
@@ -152,7 +169,7 @@ const orderInvoices = computed(() =>
                     Demandes :
                     <template v-for="(n, i) in order.requestNumbers" :key="n">
                         <Link
-                            :href="`/achats/demandes/${requests.find((r) => r.number === n)?.id ?? ''}`"
+                            :href="`/achats/demandes?q=${n}`"
                             class="hover:underline"
                             >{{ n }}</Link
                         ><template v-if="i < order.requestNumbers.length - 1"

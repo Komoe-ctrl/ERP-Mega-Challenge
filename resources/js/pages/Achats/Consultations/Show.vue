@@ -1,38 +1,34 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { AlertTriangle, Plus, Trophy } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ConsultationController from '@/actions/App/Http/Controllers/Achats/ConsultationController';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
 import { fcfa } from '@/lib/format';
-import { consultations, suppliers } from '@/mocks/v2';
-import type { Quote } from '@/types/erp';
+import type { Consultation } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{
+    consultation: Consultation;
+    suppliers: { value: string; label: string }[];
+    canManage: boolean;
+    orderId: number | null;
+}>();
 
 defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Achats', href: '/achats/demandes' },
-            { title: 'Consultations', href: '/achats/consultations' },
+            { title: 'Cotations', href: '/achats/consultations' },
         ],
     },
 });
 
-const { can } = usePermissions();
-const consultation = computed(
-    () => consultations.find((c) => c.id === props.id) ?? consultations[0],
-);
-const extraQuotes = ref<Quote[]>([]);
-const quotes = computed(() => [
-    ...consultation.value.quotes,
-    ...extraQuotes.value,
-]);
+const quotes = computed(() => props.consultation.quotes);
 const sorted = computed(() =>
     [...quotes.value].sort((a, b) => a.unitTotal - b.unitTotal),
 );
@@ -41,27 +37,26 @@ const fastest = computed(
     () => [...quotes.value].sort((a, b) => a.delayDays - b.delayDays)[0],
 );
 const missing = computed(() =>
-    Math.max(0, consultation.value.minSuppliers - quotes.value.length),
+    Math.max(0, props.consultation.minSuppliers - quotes.value.length),
 );
 const chosen = ref<number | null>(
-    consultation.value.quotes.find((q) => q.selected)?.supplierId ?? null,
+    props.consultation.quotes.find((q) => q.selected)?.supplierId ?? null,
 );
-const attributed = computed(() => consultation.value.status === 'attribuee');
+const attributed = computed(() => props.consultation.status === 'attribuee');
 const offerOpen = ref(false);
 
 const offerFields = computed<FieldDef[]>(() => [
     {
-        name: 'supplier',
+        name: 'supplier_id',
         label: 'Fournisseur',
         type: 'select',
         required: true,
-        options: suppliers
-            .filter((s) => !quotes.value.some((q) => q.supplierId === s.id))
-            .map((s) => ({ value: s.id, label: s.name })),
+        options: props.suppliers,
         wide: true,
+        hint: 'Seuls les fournisseurs actifs de la bonne catégorie sont proposés (RG3.1).',
     },
     {
-        name: 'amount',
+        name: 'total_amount',
         label: 'Total HT proposé',
         type: 'number',
         required: true,
@@ -70,7 +65,7 @@ const offerFields = computed<FieldDef[]>(() => [
         unit: 'FCFA',
     },
     {
-        name: 'delay',
+        name: 'delay_days',
         label: 'Délai de livraison',
         type: 'number',
         required: true,
@@ -81,20 +76,29 @@ const offerFields = computed<FieldDef[]>(() => [
 ]);
 
 function addOffer(v: FieldValues) {
-    const supplier = suppliers.find((s) => s.id === Number(v.supplier));
-
-    extraQuotes.value.push({
-        supplierId: Number(v.supplier),
-        supplierName: supplier?.name ?? '',
-        unitTotal: Number(v.amount),
-        delayDays: Number(v.delay),
-    });
-    toast.success('Offre enregistrée (maquette).');
+    router.post(
+        ConsultationController.addQuote.url(props.consultation.id),
+        {
+            supplier_id: v.supplier_id,
+            total_amount: v.total_amount,
+            delay_days: v.delay_days,
+        },
+        {
+            preserveScroll: true,
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Offre invalide.'),
+        },
+    );
 }
 
 function choose() {
-    toast.success(
-        'Fournisseur retenu : le bon de commande est créé (maquette).',
+    router.post(
+        ConsultationController.award.url(props.consultation.id),
+        { supplier_id: chosen.value },
+        {
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Attribution refusée.'),
+        },
     );
 }
 </script>
@@ -109,7 +113,7 @@ function choose() {
         >
             <StatusBadge kind="consultation" :status="consultation.status" />
             <Button
-                v-if="can('achats.update') && !attributed"
+                v-if="canManage && !attributed"
                 variant="outline"
                 @click="offerOpen = true"
                 ><Plus /> Ajouter une offre</Button
@@ -163,9 +167,7 @@ function choose() {
                                     type="radio"
                                     name="offer"
                                     :value="q.supplierId"
-                                    :disabled="
-                                        !can('achats.update') || attributed
-                                    "
+                                    :disabled="!canManage || attributed"
                                     :aria-label="`Retenir ${q.supplierName}`"
                                     class="size-4"
                                 />
@@ -225,10 +227,15 @@ function choose() {
 
         <div class="flex flex-wrap gap-2">
             <Button
-                v-if="can('achats.update')"
+                v-if="canManage"
                 :disabled="chosen === null || missing > 0 || attributed"
                 @click="choose"
                 >Retenir ce fournisseur et créer le bon de commande</Button
+            >
+            <Button v-if="orderId" variant="secondary" as-child
+                ><Link :href="`/achats/commandes/${orderId}`"
+                    >Voir le bon de commande</Link
+                ></Button
             >
             <Button variant="outline" as-child
                 ><Link href="/achats/consultations">Retour</Link></Button

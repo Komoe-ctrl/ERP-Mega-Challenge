@@ -1,20 +1,34 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Check, Plus, X } from '@lucide/vue';
 import { computed, h, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import SupplierInvoiceController from '@/actions/App/Http/Controllers/Achats/SupplierInvoiceController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
-import { addDays, dateFr, fcfa } from '@/lib/format';
+import type { DataTableColumn } from '@/lib/dataTable';
+import { dateFr, fcfa } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { invoices, orders, receptions } from '@/mocks/v2';
+import type { Paginated } from '@/types';
 import type { SupplierInvoice } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+type Row = SupplierInvoice & { canControl: boolean; canPay: boolean };
+
+const props = defineProps<{
+    invoices: Paginated<Row>;
+    filters: { status: string };
+    canCreate: boolean;
+    orders: {
+        value: string;
+        label: string;
+        receptions: { value: string; label: string }[];
+    }[];
+}>();
 
 defineOptions({
     layout: {
@@ -25,8 +39,6 @@ defineOptions({
     },
 });
 
-const { can } = usePermissions();
-const rows = ref<SupplierInvoice[]>(invoices.map((i) => ({ ...i })));
 const createOpen = ref(false);
 
 const mark = (ok: boolean) =>
@@ -35,30 +47,31 @@ const mark = (ok: boolean) =>
         'aria-label': ok ? 'Concorde' : 'Écart',
     });
 
-// RG8.10 : une facture n'est payable que si elle concorde avec le bon de commande et la réception.
-const payable = (i: SupplierInvoice) =>
-    i.match.order && i.match.reception && i.match.price;
-
 const fields = computed<FieldDef[]>(() => [
     {
         name: 'number',
         label: 'N° de facture fournisseur',
         required: true,
         minLength: 3,
-        validate: (v) =>
-            rows.value.some((i) => i.number === v)
-                ? 'Cette facture est déjà saisie.'
-                : null,
     },
     {
-        name: 'order',
+        name: 'purchase_order_id',
         label: 'Bon de commande',
         type: 'select',
         required: true,
-        options: orders.map((o) => ({
-            value: o.number,
-            label: `${o.number} — ${o.supplierName}`,
-        })),
+        options: props.orders.map((o) => ({ value: o.value, label: o.label })),
+    },
+    {
+        name: 'reception_id',
+        label: 'Réception rapprochée',
+        type: 'select',
+        options: props.orders.flatMap((o) =>
+            o.receptions.map((r) => ({
+                value: r.value,
+                label: `${r.label} (${o.label.split(' — ')[0]})`,
+            })),
+        ),
+        hint: 'Facultatif : sans réception, la facture ne concorde pas et reste non payable (RG8.10).',
     },
     {
         name: 'amount',
@@ -69,51 +82,50 @@ const fields = computed<FieldDef[]>(() => [
         step: 1,
         unit: 'FCFA',
     },
-    { name: 'date', label: 'Date de facture', type: 'date', required: true },
     {
-        name: 'file',
-        label: 'Pièce jointe',
-        type: 'file',
-        hint: 'Facture scannée (20 Mo maximum).',
-        wide: true,
+        name: 'invoice_date',
+        label: 'Date de facture',
+        type: 'date',
+        required: true,
+    },
+    {
+        name: 'due_date',
+        label: 'Échéance',
+        type: 'date',
+        required: true,
     },
 ]);
 
-// Contrôle à trois voies calculé à la saisie : bon de commande, réception, prix.
 function create(v: FieldValues) {
-    const order = orders.find((o) => o.number === v.order);
-
-    if (!order) {
-        return;
-    }
-
-    const reception = receptions.find((r) => r.orderNumber === order.number);
-    const match = {
-        order: true,
-        reception: Boolean(reception) && reception?.gap === 'conforme',
-        price: Number(v.amount) === order.amount,
-    };
-
-    rows.value.unshift({
-        id: Date.now(),
-        number: String(v.number),
-        supplierName: order.supplierName,
-        orderNumber: order.number,
-        receptionNumber: reception?.number ?? '—',
-        date: String(v.date),
-        dueDate: addDays(String(v.date), 30),
-        amount: Number(v.amount),
-        match,
-        status: match.reception && match.price ? 'controlee' : 'ecart',
-    });
-    toast[match.reception && match.price ? 'success' : 'warning'](
-        match.reception && match.price
-            ? 'Facture concordante : elle peut être payée.'
-            : 'Écart de contrôle : paiement bloqué tant que la facture ne concorde pas.',
+    router.post(
+        SupplierInvoiceController.store.url(),
+        {
+            number: v.number,
+            purchase_order_id: v.purchase_order_id,
+            reception_id: v.reception_id || null,
+            amount: v.amount,
+            invoice_date: v.invoice_date,
+            due_date: v.due_date,
+        },
+        {
+            preserveScroll: true,
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Facture invalide.'),
+        },
     );
 }
 
-const columns: DataTableColumn<SupplierInvoice>[] = [
+const act = (url: string) => router.post(url, {}, { preserveScroll: true });
+
+function applyStatus(status: string) {
+    router.get(
+        SupplierInvoiceController.index.url(),
+        status ? { status } : {},
+        { preserveState: true, replace: true },
+    );
+}
+
+const columns: DataTableColumn<Row>[] = [
     {
         accessorKey: 'number',
         header: 'Facture',
@@ -130,9 +142,8 @@ const columns: DataTableColumn<SupplierInvoice>[] = [
     {
         id: 'refs',
         header: 'BC / réception',
-        accessorFn: (i) => `${i.orderNumber} ${i.receptionNumber}`,
         cell: ({ row }) =>
-            `${row.original.orderNumber} · ${row.original.receptionNumber}`,
+            `${row.original.orderNumber} · ${row.original.receptionNumber || '—'}`,
     },
     {
         accessorKey: 'dueDate',
@@ -165,45 +176,42 @@ const columns: DataTableColumn<SupplierInvoice>[] = [
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('invoice', row.original.status),
     },
     {
         id: 'actions',
         header: '',
         enableSorting: false,
-        cell: ({ row }) =>
-            row.original.status === 'payee'
-                ? null
-                : h(
-                      Button,
-                      {
-                          size: 'sm',
-                          variant: payable(row.original)
-                              ? 'default'
-                              : 'outline',
-                          disabled: !payable(row.original),
-                          title: payable(row.original)
-                              ? 'Transmettre à la comptabilité'
-                              : 'Facture non concordante : paiement bloqué',
-                          onClick: () =>
-                              toast.success(
-                                  `${row.original.number} transmise à la comptabilité (maquette).`,
-                              ),
-                      },
-                      () => 'Payer',
-                  ),
-    },
-];
+        cell: ({ row }) => {
+            const i = row.original;
 
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.invoice).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
+            if (i.canControl && i.status === 'a_controler') {
+                return h(
+                    Button,
+                    {
+                        size: 'sm',
+                        variant: 'outline',
+                        onClick: () =>
+                            act(SupplierInvoiceController.control.url(i.id)),
+                    },
+                    () => 'Contrôler',
+                );
+            }
+
+            if (i.canPay && i.status === 'controlee') {
+                return h(
+                    Button,
+                    {
+                        size: 'sm',
+                        onClick: () =>
+                            act(SupplierInvoiceController.pay.url(i.id)),
+                    },
+                    () => 'Payer',
+                );
+            }
+
+            return null;
+        },
     },
 ];
 </script>
@@ -216,22 +224,40 @@ const filters: DataTableFilter[] = [
             title="Factures fournisseurs"
             description="Contrôle à trois voies : facture, bon de commande et réception doivent concorder (RG8.10)."
         >
-            <Button
-                v-if="can('finance.create') || can('achats.create')"
-                @click="createOpen = true"
+            <Button v-if="canCreate" @click="createOpen = true"
                 ><Plus /> Saisir une facture</Button
             >
         </PageHeader>
+
+        <select
+            class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            aria-label="Filtrer par statut"
+            :value="filters.status"
+            @change="applyStatus(($event.target as HTMLSelectElement).value)"
+        >
+            <option value="">Statut : tous</option>
+            <option
+                v-for="(meta, value) in statuses.invoice"
+                :key="value"
+                :value="value"
+            >
+                {{ meta.label }}
+            </option>
+        </select>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher une facture…"
+            :data="invoices.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucune facture."
         />
+        <PaginationBar :page="invoices" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Saisir une facture fournisseur"
-            description="Le contrôle à trois voies est calculé à l’enregistrement."
+            description="Le contrôle à trois voies est calculé au contrôle de la facture."
             :fields="fields"
             @submit="create"
         />

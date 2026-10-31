@@ -1,21 +1,35 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import PurchaseOrderController from '@/actions/App/Http/Controllers/Achats/PurchaseOrderController';
 import DataTable from '@/components/DataTable.vue';
 import FormDialog from '@/components/erp/FormDialog.vue';
 import PageHeader from '@/components/erp/PageHeader.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import { amountCell, badgeCell, linkCell } from '@/lib/cells';
-import type { DataTableColumn, DataTableFilter } from '@/lib/dataTable';
-import { dateFr, fcfa, TODAY } from '@/lib/format';
+import type { DataTableColumn } from '@/lib/dataTable';
+import { dateFr, fcfa } from '@/lib/format';
 import { statuses } from '@/lib/status';
-import { requestTotal, requests } from '@/mocks/achats';
-import { orders, suppliers } from '@/mocks/v2';
+import type { Paginated } from '@/types';
 import type { PurchaseOrder } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
+
+const props = defineProps<{
+    orders: Paginated<PurchaseOrder>;
+    filters: { status: string };
+    orderable: {
+        id: number;
+        number: string;
+        chantierName: string;
+        total: number;
+    }[];
+    suppliers: { value: string; label: string }[];
+    threshold: number;
+}>();
 
 defineOptions({
     layout: {
@@ -27,77 +41,53 @@ defineOptions({
 });
 
 const { can } = usePermissions();
-const rows = ref<PurchaseOrder[]>(orders.map((o) => ({ ...o })));
 const createOpen = ref(false);
 
 // RG8.8 : un bon regroupe des demandes validées d'un même chantier (ici une demande à la fois).
-const orderable = computed(() =>
-    requests.filter(
-        (r) =>
-            r.status === 'validee' &&
-            !rows.value.some((o) => o.requestNumbers.includes(r.number)),
-    ),
-);
 const fields = computed<FieldDef[]>(() => [
     {
-        name: 'request',
+        name: 'purchase_request_id',
         label: 'Demande validée',
         type: 'select',
         required: true,
         wide: true,
-        options: orderable.value.map((r) => ({
-            value: r.number,
-            label: `${r.number} — ${r.chantierName} (${fcfa(requestTotal(r))})`,
+        options: props.orderable.map((r) => ({
+            value: String(r.id),
+            label: `${r.number} — ${r.chantierName} (${fcfa(r.total)})`,
         })),
-        hint: orderable.value.length
-            ? undefined
+        hint: props.orderable.length
+            ? `Au-delà de ${fcfa(props.threshold)}, passez par une consultation (RG8.11).`
             : 'Aucune demande validée en attente de commande.',
     },
     {
-        name: 'supplier',
+        name: 'supplier_id',
         label: 'Fournisseur',
         type: 'select',
         required: true,
-        options: suppliers.map((s) => ({ value: s.name, label: s.name })),
+        options: props.suppliers,
         wide: true,
-    },
-    {
-        name: 'delivery',
-        label: 'Livraison souhaitée',
-        type: 'date',
-        required: true,
-        validate: (v) =>
-            v && String(v) < TODAY
-                ? 'La date ne peut pas être dans le passé.'
-                : null,
     },
 ]);
 
 function create(v: FieldValues) {
-    const request = requests.find((r) => r.number === v.request);
+    router.post(
+        PurchaseOrderController.store.url(),
+        {
+            purchase_request_id: v.purchase_request_id,
+            supplier_id: v.supplier_id,
+        },
+        {
+            onError: (errors) =>
+                toast.error(Object.values(errors)[0] ?? 'Commande refusée.'),
+        },
+    );
+}
 
-    if (!request) {
-        return;
-    }
-
-    rows.value.unshift({
-        id: Date.now(),
-        number: `BC-2026-00${114 + rows.value.length - orders.length}`,
-        supplierName: String(v.supplier),
-        chantierName: request.chantierName,
-        requestNumbers: [request.number],
-        date: TODAY,
-        amount: requestTotal(request),
-        status: 'emis',
-        lines: request.lines.map((l) => ({
-            label: `Ligne ${l.id}`,
-            unit: '',
-            ordered: l.quantity,
-            received: 0,
-            unitPrice: 0,
-        })),
+function applyStatus(status: string) {
+    router.get(PurchaseOrderController.index.url(), status ? { status } : {}, {
+        preserveState: true,
+        replace: true,
     });
-    toast.success('Bon de commande émis (maquette).');
 }
 
 const columns: DataTableColumn<PurchaseOrder>[] = [
@@ -106,7 +96,7 @@ const columns: DataTableColumn<PurchaseOrder>[] = [
         header: 'Bon de commande',
         cell: ({ row }) =>
             linkCell(
-                `/achats/commandes/${row.original.id}`,
+                PurchaseOrderController.show.url(row.original.id),
                 row.original.number,
                 row.original.requestNumbers.join(', '),
             ),
@@ -126,19 +116,7 @@ const columns: DataTableColumn<PurchaseOrder>[] = [
     {
         accessorKey: 'status',
         header: 'Statut',
-        filterFn: 'equalsString',
         cell: ({ row }) => badgeCell('order', row.original.status),
-    },
-];
-
-const filters: DataTableFilter[] = [
-    {
-        columnId: 'status',
-        label: 'Statut',
-        options: Object.entries(statuses.order).map(([value, meta]) => ({
-            value,
-            label: meta.label,
-        })),
     },
 ];
 </script>
@@ -155,12 +133,32 @@ const filters: DataTableFilter[] = [
                 ><Plus /> Nouveau bon de commande</Button
             >
         </PageHeader>
+
+        <select
+            class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            aria-label="Filtrer par statut"
+            :value="filters.status"
+            @change="applyStatus(($event.target as HTMLSelectElement).value)"
+        >
+            <option value="">Statut : tous</option>
+            <option
+                v-for="(meta, value) in statuses.order"
+                :key="value"
+                :value="value"
+            >
+                {{ meta.label }}
+            </option>
+        </select>
+
         <DataTable
             :columns="columns"
-            :data="rows"
-            :filters="filters"
-            search-placeholder="Rechercher un bon de commande…"
+            :data="orders.data"
+            :searchable="false"
+            :paginate="false"
+            empty-message="Aucun bon de commande."
         />
+        <PaginationBar :page="orders" />
+
         <FormDialog
             v-model:open="createOpen"
             title="Nouveau bon de commande"

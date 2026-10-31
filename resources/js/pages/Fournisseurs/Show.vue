@@ -12,8 +12,7 @@ import PageHeader from '@/components/erp/PageHeader.vue';
 import StatusBadge from '@/components/erp/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { dateFr, fcfa } from '@/lib/format';
-import { invoices, orders } from '@/mocks/v2';
-import type { Supplier } from '@/types/erp';
+import type { PurchaseOrder, Supplier } from '@/types/erp';
 import type { FieldDef, FieldValues } from '@/types/forms';
 
 type Tariff = {
@@ -31,22 +30,94 @@ const props = defineProps<{
     articles: { value: string; label: string }[];
     categories: string[];
     canUpdate: boolean;
+    orders: PurchaseOrder[];
+    unpaidInvoices: {
+        id: number;
+        number: string;
+        dueDate: string;
+        amount: number;
+        status: string;
+    }[];
+    evaluations: {
+        reception: string;
+        delay: number;
+        quality: number;
+        price: number;
+        comment: string;
+    }[];
+    evaluable: { value: string; label: string }[];
 }>();
 
 defineOptions({
     layout: { breadcrumbs: [{ title: 'Fournisseurs', href: '/fournisseurs' }] },
 });
 
-// CA3 : commandes, factures non payées et note moyenne en un écran. Les commandes,
-// factures et évaluations seront branchées avec le processus d'achat complet (maquettes en attendant).
-const supplierOrders = computed(() =>
-    orders.filter((o) => o.supplierName === props.supplier.name),
-);
-const unpaid = computed(() =>
-    invoices.filter(
-        (i) => i.supplierName === props.supplier.name && i.status !== 'payee',
-    ),
-);
+// CA3 : commandes, factures non payées et note moyenne en un écran.
+const supplierOrders = computed(() => props.orders);
+const unpaid = computed(() => props.unpaidInvoices);
+const average = computed(() => {
+    if (!props.evaluations.length) {
+        return null;
+    }
+
+    const total = props.evaluations.reduce(
+        (s, e) => s + e.delay + e.quality + e.price,
+        0,
+    );
+
+    return total / (props.evaluations.length * 3);
+});
+
+const evaluateOpen = ref(false);
+const evaluateFields = computed<FieldDef[]>(() => [
+    {
+        name: 'reception_id',
+        label: 'Réception évaluée',
+        type: 'select',
+        required: true,
+        options: props.evaluable,
+        wide: true,
+        hint: props.evaluable.length
+            ? 'Une évaluation par réception.'
+            : 'Aucune réception à évaluer.',
+    },
+    {
+        name: 'delay',
+        label: 'Respect des délais (1 à 5)',
+        type: 'number',
+        required: true,
+        min: 1,
+        max: 5,
+        step: 1,
+    },
+    {
+        name: 'quality',
+        label: 'Qualité (1 à 5)',
+        type: 'number',
+        required: true,
+        min: 1,
+        max: 5,
+        step: 1,
+    },
+    {
+        name: 'price',
+        label: 'Respect des prix (1 à 5)',
+        type: 'number',
+        required: true,
+        min: 1,
+        max: 5,
+        step: 1,
+    },
+    { name: 'comment', label: 'Commentaire', type: 'textarea', wide: true },
+]);
+
+function evaluate(v: FieldValues) {
+    router.post(
+        SupplierController.evaluate.url(props.supplier.id),
+        v as Record<string, string | number>,
+        { preserveScroll: true, onError },
+    );
+}
 
 const editOpen = ref(false);
 const tariffOpen = ref(false);
@@ -200,7 +271,11 @@ function reactivate() {
         <div class="grid gap-3 sm:grid-cols-3">
             <KpiCard
                 label="Note moyenne"
-                value="Non évalué"
+                :value="
+                    average === null
+                        ? 'Non évalué'
+                        : `${average.toFixed(1).replace('.', ',')} / 5`
+                "
                 hint="Délais, qualité, respect des prix"
                 :icon="Star"
                 tone="brand"
@@ -324,13 +399,42 @@ function reactivate() {
         </div>
 
         <section class="rounded-xl border bg-card p-4 shadow-xs">
-            <h2 class="mb-3 font-display font-semibold">Évaluations</h2>
+            <div class="mb-3 flex items-center justify-between gap-2">
+                <h2 class="font-display font-semibold">Évaluations</h2>
+                <Button
+                    v-if="canUpdate && evaluable.length"
+                    size="sm"
+                    variant="outline"
+                    @click="evaluateOpen = true"
+                    >Évaluer une réception</Button
+                >
+            </div>
+            <ul v-if="evaluations.length" class="divide-y text-sm">
+                <li v-for="e in evaluations" :key="e.reception" class="py-2.5">
+                    <span class="font-medium">{{ e.reception }}</span>
+                    <span class="ml-2 text-muted-foreground"
+                        >délais {{ e.delay }} · qualité {{ e.quality }} · prix
+                        {{ e.price }}</span
+                    >
+                    <p v-if="e.comment" class="text-muted-foreground">
+                        {{ e.comment }}
+                    </p>
+                </li>
+            </ul>
             <EmptyState
+                v-else
                 compact
                 title="Aucune évaluation"
                 description="Le fournisseur est noté après chaque réception de commande (délais, qualité, respect des prix)."
             />
         </section>
+
+        <FormDialog
+            v-model:open="evaluateOpen"
+            title="Évaluer une réception"
+            :fields="evaluateFields"
+            @submit="evaluate"
+        />
 
         <FormDialog
             v-model:open="editOpen"
